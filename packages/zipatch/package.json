@@ -1,0 +1,36 @@
+{
+  "name": "@ffcafe/ixion-zipatch",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "tsx src/index.ts",
+    "lint": "biome check --write src",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@types/debug": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "config": "workspace:*",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "debug": "catalog:",
+    "smart-buffer": "catalog:"
+  }
+}
