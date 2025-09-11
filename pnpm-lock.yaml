@@ -65,6 +65,28 @@ importers:
 
   config: {}
 
+  packages/server:
+    dependencies:
+      debug:
+        specifier: 'catalog:'
+        version: 4.4.1
+    devDependencies:
+      '@types/debug':
+        specifier: 'catalog:'
+        version: 4.1.12
+      config:
+        specifier: workspace:*
+        version: link:../../config
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.5)(typescript@5.9.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.5)
+
   packages/storage:
     dependencies:
       minio:
