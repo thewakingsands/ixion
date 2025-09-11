@@ -65,6 +65,40 @@ importers:
 
   config: {}
 
+  packages/cli:
+    dependencies:
+      '@ffcafe/ixion-server':
+        specifier: workspace:*
+        version: link:../server
+      '@ffcafe/ixion-storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@ffcafe/ixion-zipatch':
+        specifier: workspace:*
+        version: link:../zipatch
+      commander:
+        specifier: ^14.0.0
+        version: 14.0.0
+      debug:
+        specifier: 'catalog:'
+        version: 4.4.1
+    devDependencies:
+      '@types/debug':
+        specifier: 'catalog:'
+        version: 4.1.12
+      config:
+        specifier: workspace:*
+        version: link:../../config
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.5)(typescript@5.9.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.5)
+
   packages/server:
     dependencies:
       debug:
@@ -695,6 +729,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@14.0.0:
+    resolution: {integrity: sha512-2uM9rYjPvyq39NwLRqaiLtWHyDC1FvryJDa2ATTVims5YAS4PupsEQsDvP14FqhFr0P49CYDugi59xaxJlTXRA==}
+    engines: {node: '>=20'}
 
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
@@ -1842,6 +1880,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@14.0.0: {}
 
   commander@4.1.1: {}
 

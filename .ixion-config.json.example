@@ -1,0 +1,25 @@
+{
+  "storages": [
+    {
+      "name": "local",
+      "type": "local",
+      "config": {
+        "rootPath": "./versions"
+      }
+    },
+    {
+      "name": "minio-backup",
+      "type": "minio",
+      "config": {
+        "endPoint": "localhost",
+        "port": 9000,
+        "useSSL": false,
+        "accessKey": "minioadmin",
+        "secretKey": "minioadmin",
+        "bucketName": "ixion-versions",
+        "region": "us-east-1",
+        "prefix": "ffxiv/"
+      }
+    }
+  ]
+}

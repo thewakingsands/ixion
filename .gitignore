@@ -1,3 +1,9 @@
 node_modules
 dist
 coverage
+
+# Temporary workspace directories
+temp-*
+
+# Ixion configuration
+.ixion-config.json
