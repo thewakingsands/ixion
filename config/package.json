@@ -1,0 +1,11 @@
+{
+  "name": "config",
+  "private": true,
+  "exports": {
+    "./tsup": {
+      "import": "./tsup.config.mjs",
+      "types": "./tsup.config.d.ts"
+    },
+    "./tsconfig.json": "./tsconfig.json"
+  }
+}

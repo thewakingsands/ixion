@@ -1,9 +1,11 @@
 {
   "name": "@ffcafe/ixion",
+  "type": "module",
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "@tsconfig/node22": "^22.0.2",
     "@types/node": "catalog:",
+    "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"
   },
