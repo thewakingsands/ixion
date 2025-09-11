@@ -1,10 +1,15 @@
 {
   "name": "@ffcafe/ixion",
   "type": "module",
+  "scripts": {
+    "lefthook": "lefthook",
+    "postinstall": "lefthook install"
+  },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "@tsconfig/node22": "^22.0.2",
     "@types/node": "catalog:",
+    "lefthook": "^1.13.0",
     "tsup": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"
