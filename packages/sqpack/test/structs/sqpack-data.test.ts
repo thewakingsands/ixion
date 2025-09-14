@@ -2,15 +2,15 @@ import { SmartBuffer } from 'smart-buffer'
 import { describe, expect, it } from 'vitest'
 import {
   FileType,
-  readSqPackDataBlockHeader,
+  readSqPackDataChunkHeader,
   readSqPackFileInfo,
-  readSqPackStandardBlockInfo,
-  type SqPackDataBlockHeader,
+  readSqPackStandardChunkInfo,
+  type SqPackDataChunkHeader,
   type SqPackFileInfo,
-  type SqPackStandardBlockInfo,
-  writeSqPackDataBlockHeader,
+  type SqPackStandardChunkInfo,
+  writeSqPackDataChunkHeader,
   writeSqPackFileInfo,
-  writeSqPackStandardBlockInfo,
+  writeSqPackStandardChunkInfo,
 } from '../../src/structs/sqpack-data'
 
 describe('SqPack Data Structs', () => {
@@ -118,24 +118,24 @@ describe('SqPack Data Structs', () => {
       buffer.writeUInt32LE(0x2000, 12) // uncompressedSize
 
       const smartBuffer = SmartBuffer.fromBuffer(buffer)
-      const blockHeader = readSqPackDataBlockHeader(smartBuffer)
+      const blockHeader = readSqPackDataChunkHeader(smartBuffer)
 
       expect(blockHeader.size).toBe(16)
-      expect(blockHeader.__unknown).toBe(0x12345678)
+      expect(blockHeader.u1).toBe(0x12345678)
       expect(blockHeader.compressedSize).toBe(0x1000)
       expect(blockHeader.uncompressedSize).toBe(0x2000)
     })
 
     it('should write SqPack data block header correctly', () => {
-      const blockHeader: SqPackDataBlockHeader = {
+      const blockHeader: SqPackDataChunkHeader = {
         size: 16,
-        __unknown: 0x12345678,
+        u1: 0x12345678,
         compressedSize: 0x1000,
         uncompressedSize: 0x2000,
       }
 
       const buffer = new SmartBuffer()
-      writeSqPackDataBlockHeader(buffer, blockHeader)
+      writeSqPackDataChunkHeader(buffer, blockHeader)
       const writtenData = buffer.toBuffer()
 
       expect(writtenData.readUInt32LE(0)).toBe(16)
@@ -145,24 +145,24 @@ describe('SqPack Data Structs', () => {
     })
 
     it('should round-trip read and write correctly', () => {
-      const originalBlockHeader: SqPackDataBlockHeader = {
+      const originalBlockHeader: SqPackDataChunkHeader = {
         size: 20,
-        __unknown: 0x87654321,
+        u1: 0x87654321,
         compressedSize: 0x3000,
         uncompressedSize: 0x5000,
       }
 
       // Write block header
       const writeBuffer = new SmartBuffer()
-      writeSqPackDataBlockHeader(writeBuffer, originalBlockHeader)
+      writeSqPackDataChunkHeader(writeBuffer, originalBlockHeader)
       const writtenData = writeBuffer.toBuffer()
 
       // Read block header back
       const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readBlockHeader = readSqPackDataBlockHeader(readBuffer)
+      const readBlockHeader = readSqPackDataChunkHeader(readBuffer)
 
       expect(readBlockHeader.size).toBe(originalBlockHeader.size)
-      expect(readBlockHeader.__unknown).toBe(originalBlockHeader.__unknown)
+      expect(readBlockHeader.u1).toBe(originalBlockHeader.u1)
       expect(readBlockHeader.compressedSize).toBe(
         originalBlockHeader.compressedSize,
       )
@@ -180,7 +180,7 @@ describe('SqPack Data Structs', () => {
       buffer.writeUInt16LE(0x1000, 6) // uncompressedSize
 
       const smartBuffer = SmartBuffer.fromBuffer(buffer)
-      const blockInfo = readSqPackStandardBlockInfo(smartBuffer)
+      const blockInfo = readSqPackStandardChunkInfo(smartBuffer)
 
       expect(blockInfo.offset).toBe(0x1000)
       expect(blockInfo.compressedSize).toBe(0x800)
@@ -188,14 +188,14 @@ describe('SqPack Data Structs', () => {
     })
 
     it('should write SqPack standard block info correctly', () => {
-      const blockInfo: SqPackStandardBlockInfo = {
+      const blockInfo: SqPackStandardChunkInfo = {
         offset: 0x1000,
         compressedSize: 0x800,
         uncompressedSize: 0x1000,
       }
 
       const buffer = new SmartBuffer()
-      writeSqPackStandardBlockInfo(buffer, blockInfo)
+      writeSqPackStandardChunkInfo(buffer, blockInfo)
       const writtenData = buffer.toBuffer()
 
       expect(writtenData.readUInt32LE(0)).toBe(0x1000)
@@ -204,7 +204,7 @@ describe('SqPack Data Structs', () => {
     })
 
     it('should round-trip read and write correctly', () => {
-      const originalBlockInfo: SqPackStandardBlockInfo = {
+      const originalBlockInfo: SqPackStandardChunkInfo = {
         offset: 0x2000,
         compressedSize: 0x1200,
         uncompressedSize: 0x2400,
@@ -212,12 +212,12 @@ describe('SqPack Data Structs', () => {
 
       // Write block info
       const writeBuffer = new SmartBuffer()
-      writeSqPackStandardBlockInfo(writeBuffer, originalBlockInfo)
+      writeSqPackStandardChunkInfo(writeBuffer, originalBlockInfo)
       const writtenData = writeBuffer.toBuffer()
 
       // Read block info back
       const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readBlockInfo = readSqPackStandardBlockInfo(readBuffer)
+      const readBlockInfo = readSqPackStandardChunkInfo(readBuffer)
 
       expect(readBlockInfo.offset).toBe(originalBlockInfo.offset)
       expect(readBlockInfo.compressedSize).toBe(
@@ -229,18 +229,18 @@ describe('SqPack Data Structs', () => {
     })
 
     it('should handle maximum values for 16-bit fields', () => {
-      const blockInfo: SqPackStandardBlockInfo = {
+      const blockInfo: SqPackStandardChunkInfo = {
         offset: 0xffffffff,
         compressedSize: 0xffff,
         uncompressedSize: 0xffff,
       }
 
       const buffer = new SmartBuffer()
-      writeSqPackStandardBlockInfo(buffer, blockInfo)
+      writeSqPackStandardChunkInfo(buffer, blockInfo)
       const writtenData = buffer.toBuffer()
 
       const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readBlockInfo = readSqPackStandardBlockInfo(readBuffer)
+      const readBlockInfo = readSqPackStandardChunkInfo(readBuffer)
 
       expect(readBlockInfo.offset).toBe(0xffffffff)
       expect(readBlockInfo.compressedSize).toBe(0xffff)

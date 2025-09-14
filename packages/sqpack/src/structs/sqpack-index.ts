@@ -7,10 +7,12 @@ export interface IndexHashData {
   offset: number
 }
 
+export const indexHashTableEntrySize = 16
 export interface IndexHashTableEntry extends IndexHashData {
   hash: bigint // 64-bit hash (directoryHash + filenameHash)
 }
 
+export const index2HashTableEntrySize = 8
 export interface Index2HashTableEntry extends IndexHashData {
   hash: number // 32-bit hash (entire path)
 }

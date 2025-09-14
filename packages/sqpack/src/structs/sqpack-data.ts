@@ -40,33 +40,37 @@ export const readSqPackFileInfo = (buffer: SmartBuffer): SqPackFileInfo => {
   return { size, type, rawFileSize, numberOfBlocks, usedNumberOfBlocks }
 }
 
-export interface SqPackDataBlockHeader {
+export const sqPackDataChunkHeaderSize = 16
+
+export interface SqPackDataChunkHeader {
   size: number
-  __unknown: number
+  u1: number
   compressedSize: number
   uncompressedSize: number
 }
 
-export const readSqPackDataBlockHeader = (
+export const readSqPackDataChunkHeader = (
   buffer: SmartBuffer,
-): SqPackDataBlockHeader => {
+): SqPackDataChunkHeader => {
   const size = buffer.readUInt32LE()
   const __unknown = buffer.readUInt32LE()
   const compressedSize = buffer.readUInt32LE()
   const uncompressedSize = buffer.readUInt32LE()
 
-  return { size, __unknown, compressedSize, uncompressedSize }
+  return { size, u1: __unknown, compressedSize, uncompressedSize }
 }
 
-export interface SqPackStandardBlockInfo {
+export const sqPackStandardChunkInfoSize = 8
+
+export interface SqPackStandardChunkInfo {
   offset: number
   compressedSize: number
   uncompressedSize: number
 }
 
-export const readSqPackStandardBlockInfo = (
+export const readSqPackStandardChunkInfo = (
   buffer: SmartBuffer,
-): SqPackStandardBlockInfo => {
+): SqPackStandardChunkInfo => {
   const offset = buffer.readUInt32LE()
   const compressedSize = buffer.readUInt16LE()
   const uncompressedSize = buffer.readUInt16LE()
@@ -91,12 +95,12 @@ export const writeSqPackFileInfo = (
 /**
  * Write SqPack data block header structure
  */
-export const writeSqPackDataBlockHeader = (
+export const writeSqPackDataChunkHeader = (
   buffer: SmartBuffer,
-  blockHeader: SqPackDataBlockHeader,
+  blockHeader: SqPackDataChunkHeader,
 ): void => {
   buffer.writeUInt32LE(blockHeader.size)
-  buffer.writeUInt32LE(blockHeader.__unknown)
+  buffer.writeUInt32LE(blockHeader.u1)
   buffer.writeUInt32LE(blockHeader.compressedSize)
   buffer.writeUInt32LE(blockHeader.uncompressedSize)
 }
@@ -104,9 +108,9 @@ export const writeSqPackDataBlockHeader = (
 /**
  * Write SqPack standard block info structure
  */
-export const writeSqPackStandardBlockInfo = (
+export const writeSqPackStandardChunkInfo = (
   buffer: SmartBuffer,
-  blockInfo: SqPackStandardBlockInfo,
+  blockInfo: SqPackStandardChunkInfo,
 ): void => {
   buffer.writeUInt32LE(blockInfo.offset)
   buffer.writeUInt16LE(blockInfo.compressedSize)

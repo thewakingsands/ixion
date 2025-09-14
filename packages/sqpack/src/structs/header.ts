@@ -1,18 +1,26 @@
 import { SmartBuffer } from 'smart-buffer'
 import type { PlatformId } from '../interface'
 import { calculateSqPackHash, sqPackHashSize } from '../utils/hash'
+import { blockSize } from './sqpack-data'
 
+export enum SqPackType {
+  Data = 1,
+  Index = 2,
+}
+
+export const sqPackHeaderSize = 0x400
 export interface SqPackHeader {
   magic: string
   platformId: PlatformId
   size: number
   version: number
-  type: number
+  type: SqPackType
   buildDate: number
   buildTime: number
 }
 
 // https://github.com/NotAdam/Lumina/blob/master/src/Lumina/Data/Structs/SqPackIndexHeader.cs
+export const sqPackIndexHeaderSize = 0x400
 export interface SqPackIndexHeader {
   size: number
   version: number
@@ -31,6 +39,7 @@ export interface SqPackIndexHeader {
   dirIndexHash: Buffer
 }
 
+export const sqPackDataHeaderSize = 0x400
 export interface SqPackDataHeader {
   size: number
   version: number
@@ -41,11 +50,6 @@ export interface SqPackDataHeader {
   maxDataSize: number
   u4: number
   fileHash: Buffer
-}
-
-export enum SqPackType {
-  Data = 1,
-  Index = 2,
 }
 
 const sqpackVersion = 1
@@ -279,5 +283,29 @@ export const createSqPackHeader = (
     type,
     buildDate,
     buildTime,
+  })
+}
+
+/**
+ * Create SqPack data header structure
+ */
+export const createSqPackDataHeader = (
+  buffer: SmartBuffer,
+  {
+    blockCount,
+    maxDataSize,
+    fileHash,
+  }: Pick<SqPackDataHeader, 'blockCount' | 'maxDataSize' | 'fileHash'>,
+) => {
+  writeSqPackDataHeader(buffer, {
+    size: sqPackDataHeaderSize,
+    version: 0,
+    blockOffset: (sqPackHeaderSize + sqPackDataHeaderSize) / blockSize,
+    blockCount,
+    u2: 0,
+    u3: 0,
+    maxDataSize,
+    u4: 0,
+    fileHash,
   })
 }

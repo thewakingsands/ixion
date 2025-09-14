@@ -10,9 +10,9 @@ import {
 import {
   blockSize,
   FileType,
-  readSqPackDataBlockHeader,
+  readSqPackDataChunkHeader,
   readSqPackFileInfo,
-  readSqPackStandardBlockInfo,
+  readSqPackStandardChunkInfo,
   type SqPackFileInfo,
 } from './structs/sqpack-data'
 import {
@@ -159,11 +159,11 @@ export class SqPackReader {
 
     let bytesRead = 0
     for (let i = 0; i < chunkCount; i++) {
-      const chunkInfo = readSqPackStandardBlockInfo(smartBuffer)
+      const chunkInfo = readSqPackStandardChunkInfo(smartBuffer)
       const chunkOffset = offset + fileInfo.size + chunkInfo.offset
       const chunkHeaderBuffer = Buffer.alloc(16)
       await handle.read(chunkHeaderBuffer, 0, 16, chunkOffset)
-      const chunkHeader = readSqPackDataBlockHeader(
+      const chunkHeader = readSqPackDataChunkHeader(
         SmartBuffer.fromBuffer(chunkHeaderBuffer),
       )
       // chunkInfo.compressedSize is aligned to blockSize

@@ -94,3 +94,10 @@ export const parseSqPackHashFromHex = (input: string): Buffer => {
 
   return buffer
 }
+
+/**
+ * Create empty SHA1 hash
+ */
+export const createEmptySqPackHash = (): Buffer => {
+  return Buffer.alloc(sqPackHashSize, 0)
+}
