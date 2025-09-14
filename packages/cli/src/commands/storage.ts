@@ -1,3 +1,4 @@
+import { servers } from '@ffcafe/ixion-server'
 import type { Command } from 'commander'
 import { getStorageManager } from '../utils/storage.js'
 
@@ -48,18 +49,46 @@ export const registerStorageCommand = (program: Command) => {
   storageCmd
     .command('versions')
     .description('List all available versions across all storages')
-    .action(async () => {
+    .option(
+      '-s, --server <name>',
+      'Server name to list versions for',
+      'default',
+    )
+    .option('-a, --all-servers', 'List versions for all servers')
+    .action(async (options: { server: string; allServers?: boolean }) => {
       try {
         const storageManager = getStorageManager()
-        const versions = await storageManager.listVersions()
 
-        console.log('📋 Available versions:')
-        if (versions.length === 0) {
-          console.log('  No versions found')
+        if (options.allServers) {
+          // List versions for all servers
+          const serverKeys = Object.keys(servers)
+          console.log('📋 Available versions across all servers:')
+
+          for (const server of serverKeys) {
+            try {
+              const versions = await storageManager.listVersions(server)
+              if (versions.length > 0) {
+                console.log(`\n${server}:`)
+                versions.forEach((version) => {
+                  console.log(`  - ${version}`)
+                })
+              }
+            } catch (error) {
+              console.log(`\n${server}: (error: ${error})`)
+            }
+          }
         } else {
-          versions.forEach((version) => {
-            console.log(`  - ${version}`)
-          })
+          // List versions for specific server
+          const versions = await storageManager.listVersions(options.server)
+
+          console.log(`📋 Available versions for server '${options.server}':`)
+          if (versions.length === 0) {
+            console.log('  No versions found')
+          } else {
+            versions.forEach((version) => {
+              console.log(`  - ${version}`)
+            })
+          }
         }
       } catch (error) {
         console.error('❌ Failed to list versions:', error)
@@ -73,94 +102,107 @@ export const registerStorageCommand = (program: Command) => {
     .option('-s, --source <name>', 'Source storage name')
     .option('-t, --target <name>', 'Target storage name')
     .option('-a, --all', 'Sync all storages bidirectionally')
+    .option('--server <name>', 'Server name for sync operations', 'default')
     .option('--from <version>', 'Sync versions from this version onwards')
     .option('--to <version>', 'Sync versions up to this version')
-    .action(async (options) => {
-      try {
-        const storageManager = getStorageManager()
-        const storageNames = storageManager.getStorageNames()
+    .action(
+      async (options: {
+        source?: string
+        target?: string
+        all?: boolean
+        server: string
+        from?: string
+        to?: string
+      }) => {
+        try {
+          const storageManager = getStorageManager()
+          const storageNames = storageManager.getStorageNames()
 
-        if (options.all) {
-          // Sync all storages bidirectionally
-          console.log('🔄 Syncing all storages bidirectionally...')
-          const results = await storageManager.syncAllVersions()
+          if (options.all) {
+            // Sync all storages bidirectionally
+            console.log(
+              `🔄 Syncing all storages bidirectionally for server '${options.server}'...`,
+            )
+            const results = await storageManager.syncAllVersions(options.server)
 
-          console.log('\n📊 Sync Summary:')
-          for (const [syncKey, result] of Object.entries(results)) {
-            console.log(`\n${syncKey}:`)
-            console.log(`  ✅ Synced: ${result.synced.length}`)
-            console.log(`  ⏭️  Skipped: ${result.skipped.length}`)
-            console.log(`  ❌ Errors: ${result.errors.length}`)
+            console.log('\n📊 Sync Summary:')
+            for (const [syncKey, result] of Object.entries(results)) {
+              console.log(`\n${syncKey}:`)
+              console.log(`  ✅ Synced: ${result.synced.length}`)
+              console.log(`  ⏭️  Skipped: ${result.skipped.length}`)
+              console.log(`  ❌ Errors: ${result.errors.length}`)
 
-            if (result.errors.length > 0) {
-              result.errors.forEach((error) => {
-                console.log(`    - ${error}`)
+              if (result.errors.length > 0) {
+                result.errors.forEach((error) => {
+                  console.log(`    - ${error}`)
+                })
+              }
+            }
+          } else if (options.source && options.target) {
+            // Sync from specific source to target
+            if (!storageNames.includes(options.source)) {
+              console.error(`❌ Source storage '${options.source}' not found`)
+              console.log(`Available storages: ${storageNames.join(', ')}`)
+              process.exit(1)
+            }
+
+            if (!storageNames.includes(options.target)) {
+              console.error(`❌ Target storage '${options.target}' not found`)
+              console.log(`Available storages: ${storageNames.join(', ')}`)
+              process.exit(1)
+            }
+
+            // Create version filter if from/to options provided
+            let versionFilter: ((version: string) => boolean) | undefined
+            if (options.from || options.to) {
+              versionFilter = (version: string) => {
+                if (options.from && version < options.from) return false
+                if (options.to && version > options.to) return false
+                return true
+              }
+            }
+
+            console.log(
+              `🔄 Syncing from '${options.source}' to '${options.target}' for server '${options.server}'...`,
+            )
+            const result = await storageManager.syncVersions(
+              options.server,
+              options.source,
+              options.target,
+              versionFilter,
+            )
+
+            console.log('\n📊 Sync Summary:')
+            console.log(`✅ Synced: ${result.synced.length}`)
+            console.log(`⏭️  Skipped: ${result.skipped.length}`)
+            console.log(`❌ Errors: ${result.errors.length}`)
+
+            if (result.synced.length > 0) {
+              console.log('\nSynced versions:')
+              result.synced.forEach((version) => {
+                console.log(`  - ${version}`)
               })
             }
-          }
-        } else if (options.source && options.target) {
-          // Sync from specific source to target
-          if (!storageNames.includes(options.source)) {
-            console.error(`❌ Source storage '${options.source}' not found`)
-            console.log(`Available storages: ${storageNames.join(', ')}`)
-            process.exit(1)
-          }
 
-          if (!storageNames.includes(options.target)) {
-            console.error(`❌ Target storage '${options.target}' not found`)
-            console.log(`Available storages: ${storageNames.join(', ')}`)
-            process.exit(1)
-          }
-
-          // Create version filter if from/to options provided
-          let versionFilter: ((version: string) => boolean) | undefined
-          if (options.from || options.to) {
-            versionFilter = (version: string) => {
-              if (options.from && version < options.from) return false
-              if (options.to && version > options.to) return false
-              return true
+            if (result.errors.length > 0) {
+              console.log('\nErrors:')
+              result.errors.forEach((error) => {
+                console.log(`  - ${error}`)
+              })
             }
+          } else {
+            console.error(
+              '❌ Please specify either --all or both --source and --target',
+            )
+            console.log('Available storages:', storageNames.join(', '))
+            process.exit(1)
           }
-
-          console.log(
-            `🔄 Syncing from '${options.source}' to '${options.target}'...`,
-          )
-          const result = await storageManager.syncVersions(
-            options.source,
-            options.target,
-            versionFilter,
-          )
-
-          console.log('\n📊 Sync Summary:')
-          console.log(`✅ Synced: ${result.synced.length}`)
-          console.log(`⏭️  Skipped: ${result.skipped.length}`)
-          console.log(`❌ Errors: ${result.errors.length}`)
-
-          if (result.synced.length > 0) {
-            console.log('\nSynced versions:')
-            result.synced.forEach((version) => {
-              console.log(`  - ${version}`)
-            })
-          }
-
-          if (result.errors.length > 0) {
-            console.log('\nErrors:')
-            result.errors.forEach((error) => {
-              console.log(`  - ${error}`)
-            })
-          }
-        } else {
-          console.error(
-            '❌ Please specify either --all or both --source and --target',
-          )
-          console.log('Available storages:', storageNames.join(', '))
+        } catch (error) {
+          console.error('❌ Failed to sync versions:', error)
           process.exit(1)
         }
-      } catch (error) {
-        console.error('❌ Failed to sync versions:', error)
-        process.exit(1)
-      }
-    })
+      },
+    )
 
   return storageCmd
 }
