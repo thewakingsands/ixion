@@ -17,7 +17,7 @@ const rootFile = 'exd/root.exl'
 
 export async function readExdFileListFromReader(
   reader: SqPackReader,
-  filter?: (path: string) => boolean,
+  filter?: (sheet: string) => boolean,
 ) {
   const root = await reader.readFile(rootFile)
   if (!root) {
@@ -40,6 +40,7 @@ export async function readExdFileListFromReader(
     }
 
     const exhData = readExhHeader(exh)
+    debug('%d languages: %j', exhData.languageCount, exhData.languages)
     for (const language of exhData.languages) {
       for (const pagination of exhData.paginations) {
         const path = getExdPath(entry.name, pagination.startId, language)

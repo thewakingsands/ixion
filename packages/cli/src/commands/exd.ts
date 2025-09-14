@@ -1,4 +1,7 @@
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { Command } from 'commander'
+import { buildExdFiles, type ServerVersion } from '../actions/exd-build'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 
@@ -8,21 +11,32 @@ import { readExdFileList } from '../actions/exd-list'
 function createFilter(
   keywords?: string[],
   rootOnly?: boolean,
-): (path: string) => boolean {
-  return (path: string) => {
-    if (rootOnly && path.includes('/')) {
+): { filter: (sheet: string) => boolean; description: string } {
+  const filter = (sheet: string) => {
+    if (rootOnly && sheet.includes('/')) {
       return false
     }
 
     if (keywords && keywords.length > 0) {
-      const lowerPath = path.toLowerCase()
+      const lowerSheet = sheet.toLowerCase()
       return keywords.some((keyword) =>
-        lowerPath.includes(keyword.toLowerCase()),
+        lowerSheet.includes(keyword.toLowerCase()),
       )
     }
 
     return true
   }
+
+  let description = ''
+  if (rootOnly && keywords && keywords.length > 0) {
+    description = ` (root-only + name: ${keywords.join(', ')})`
+  } else if (rootOnly) {
+    description = ' (root-only)'
+  } else if (keywords && keywords.length > 0) {
+    description = ` (name: ${keywords.join(', ')})`
+  }
+
+  return { filter, description }
 }
 
 export function registerExdCommand(program: Command) {
@@ -56,25 +70,17 @@ export function registerExdCommand(program: Command) {
           name?: string[]
         },
       ) => {
-        const filter = createFilter(options.name, options.rootOnly)
+        const { filter, description } = createFilter(
+          options.name,
+          options.rootOnly,
+        )
         const foundExdFiles = await readExdFileList(
           options.server,
           version,
           filter,
         )
 
-        let filterDescription = ''
-        if (options.rootOnly && options.name && options.name.length > 0) {
-          filterDescription = ` (root-only + name: ${options.name.join(', ')})`
-        } else if (options.rootOnly) {
-          filterDescription = ' (root-only)'
-        } else if (options.name && options.name.length > 0) {
-          filterDescription = ` (name: ${options.name.join(', ')})`
-        }
-
-        console.log(
-          `📋 Found ${foundExdFiles.length} EXD files${filterDescription}:`,
-        )
+        console.log(`📋 Found ${foundExdFiles.length} EXD files${description}:`)
 
         if (foundExdFiles.length === 0) {
           console.log('  No EXD files found matching the criteria')
@@ -114,21 +120,104 @@ export function registerExdCommand(program: Command) {
           name?: string[]
         },
       ) => {
-        const filter = createFilter(options.name, options.rootOnly)
+        const { filter, description } = createFilter(
+          options.name,
+          options.rootOnly,
+        )
 
-        let filterDescription = ''
-        if (options.rootOnly && options.name && options.name.length > 0) {
-          filterDescription = ` (root-only + name: ${options.name.join(', ')})`
-        } else if (options.rootOnly) {
-          filterDescription = ' (root-only)'
-        } else if (options.name && options.name.length > 0) {
-          filterDescription = ` (name: ${options.name.join(', ')})`
-        }
-
-        console.log(`🔍 Extracting EXD files${filterDescription}...`)
+        console.log(`🔍 Extracting EXD files${description}...`)
         await extractExdFiles(options.server, version, outputDir, filter)
       },
     )
 
-  return exdCmd
+  exdCmd
+    .command('build')
+    .description('Build merged SqPack file from EXD files of different servers')
+    .argument(
+      '<output>',
+      'Output directory for SqPack files (e.g., "merged-exd")',
+    )
+    .option(
+      '-p, --prefix <prefix>',
+      'Prefix for SqPack files (e.g., "merged-exd")',
+      '0a0000.win32',
+    )
+    .option(
+      '-m, --mapping <mappings...>',
+      'Server:version mapping (e.g., "default:2024.01.01 actoz:2024.01.02")',
+    )
+    .option(
+      '--root-only',
+      'Only include files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
+    .action(
+      async (
+        output: string,
+        options: {
+          prefix?: string
+          mapping?: string[]
+          rootOnly?: boolean
+          name?: string[]
+        },
+      ) => {
+        if (!options.mapping) {
+          console.error('❌ mapping is required')
+          console.log(
+            'Example: -m sdo:2024.01.01.0000.0000 -m actoz:2024.01.02.0000.0000',
+          )
+          process.exit(1)
+        }
+
+        // Parse server:version mappings
+        const serverVersions: ServerVersion[] = []
+        const mappings = options.mapping
+
+        for (const mapping of mappings) {
+          const [server, version] = mapping.split(':')
+          if (!server || !version) {
+            console.error(`❌ Invalid server:version mapping: "${mapping}"`)
+            console.log('Expected format: "server:version"')
+            process.exit(1)
+          }
+          serverVersions.push({
+            server: server.trim(),
+            version: version.trim(),
+          })
+        }
+
+        if (serverVersions.length === 0) {
+          console.error('❌ No valid server:version mappings provided')
+          process.exit(1)
+        }
+
+        const { filter, description } = createFilter(
+          options.name,
+          options.rootOnly,
+        )
+
+        console.log(`🔨 Building merged SqPack file${description}...`)
+        console.log(`📋 Server versions:`)
+        serverVersions.forEach(({ server, version }) => {
+          console.log(`  - ${server}: ${version}`)
+        })
+
+        await mkdir(output, { recursive: true })
+        const outputPrefix = join(output, options.prefix || '0a0000.win32')
+
+        try {
+          await buildExdFiles({
+            serverVersions,
+            outputPrefix,
+            filter,
+          })
+        } catch (error) {
+          console.error('❌ Failed to build merged SqPack:', error)
+          process.exit(1)
+        }
+      },
+    )
 }
