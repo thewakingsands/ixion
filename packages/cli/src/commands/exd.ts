@@ -2,6 +2,36 @@ import type { Command } from 'commander'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 
+/**
+ * Create a filter function for root-only EXD files
+ */
+function isRootFile(path: string): boolean {
+  return path.indexOf('/', 4) === -1
+}
+
+/**
+ * Create a filter function for name-based filtering
+ */
+function createFilter(
+  keywords?: string[],
+  rootOnly?: boolean,
+): (path: string) => boolean {
+  return (path: string) => {
+    if (rootOnly && !isRootFile(path)) {
+      return false
+    }
+
+    if (keywords && keywords.length > 0) {
+      const lowerPath = path.toLowerCase()
+      return keywords.some((keyword) =>
+        lowerPath.includes(keyword.toLowerCase()),
+      )
+    }
+
+    return true
+  }
+}
+
 export function registerExdCommand(program: Command) {
   const exdCmd = program
     .command('exd')
@@ -16,18 +46,52 @@ export function registerExdCommand(program: Command) {
       'Server name for storage operations',
       'default',
     )
-    .action(async (version: string, options: { server: string }) => {
-      const foundExdFiles = await readExdFileList(options.server, version)
-      console.log(`📋 Found ${foundExdFiles.length} EXD files:`)
+    .option(
+      '--root-only',
+      'Only show files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
+    .action(
+      async (
+        version: string,
+        options: {
+          server: string
+          rootOnly?: boolean
+          name?: string[]
+        },
+      ) => {
+        const filter = createFilter(options.name, options.rootOnly)
+        const foundExdFiles = await readExdFileList(
+          options.server,
+          version,
+          filter,
+        )
 
-      if (foundExdFiles.length === 0) {
-        console.log('  No EXD files found')
-      } else {
-        foundExdFiles.sort().forEach((file) => {
-          console.log(`  - ${file}`)
-        })
-      }
-    })
+        let filterDescription = ''
+        if (options.rootOnly && options.name && options.name.length > 0) {
+          filterDescription = ` (root-only + name: ${options.name.join(', ')})`
+        } else if (options.rootOnly) {
+          filterDescription = ' (root-only)'
+        } else if (options.name && options.name.length > 0) {
+          filterDescription = ` (name: ${options.name.join(', ')})`
+        }
+
+        console.log(
+          `📋 Found ${foundExdFiles.length} EXD files${filterDescription}:`,
+        )
+
+        if (foundExdFiles.length === 0) {
+          console.log('  No EXD files found matching the criteria')
+        } else {
+          foundExdFiles.sort().forEach((file) => {
+            console.log(`  - ${file}`)
+          })
+        }
+      },
+    )
 
   exdCmd
     .command('extract')
@@ -39,13 +103,37 @@ export function registerExdCommand(program: Command) {
       'Server name for storage operations',
       'default',
     )
+    .option(
+      '--root-only',
+      'Only extract files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
     .action(
       async (
         version: string,
         outputDir: string,
-        options: { server: string },
+        options: {
+          server: string
+          rootOnly?: boolean
+          name?: string[]
+        },
       ) => {
-        await extractExdFiles(options.server, version, outputDir)
+        const filter = createFilter(options.name, options.rootOnly)
+
+        let filterDescription = ''
+        if (options.rootOnly && options.name && options.name.length > 0) {
+          filterDescription = ` (root-only + name: ${options.name.join(', ')})`
+        } else if (options.rootOnly) {
+          filterDescription = ' (root-only)'
+        } else if (options.name && options.name.length > 0) {
+          filterDescription = ` (name: ${options.name.join(', ')})`
+        }
+
+        console.log(`🔍 Extracting EXD files${filterDescription}...`)
+        await extractExdFiles(options.server, version, outputDir, filter)
       },
     )
 
