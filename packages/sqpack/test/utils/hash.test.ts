@@ -3,7 +3,7 @@ import {
   calculateIndex2Hash,
   calculateIndexHash,
   crc32,
-} from '../src/utils/hash'
+} from '../../src/utils/hash'
 
 describe('Hash Utilities', () => {
   describe('crc32', () => {
@@ -29,10 +29,7 @@ describe('Hash Utilities', () => {
       const path = 'exd/root.exl'
       const hash = calculateIndexHash(path)
 
-      expect(hash).toEqual({
-        dirHash: 0xe39b7999,
-        fileHash: 0x51b57ebc,
-      })
+      expect(hash).toEqual(0xe39b799951b57ebcn)
     })
 
     it('should handle paths with no directory', () => {
