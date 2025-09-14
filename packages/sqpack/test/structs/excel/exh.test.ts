@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SmartBuffer } from 'smart-buffer'
 import { describe, expect, it } from 'vitest'
 import { Language } from '../../../src/interface'
 import {
@@ -44,16 +43,12 @@ describe('Excel EXH Header Structs', () => {
 
   describe('ExhHeader', () => {
     it('should read EXH header correctly', () => {
-      expect(readExhHeader(SmartBuffer.fromBuffer(fixtureBuffer))).toEqual(
-        parsed,
-      )
+      expect(readExhHeader(fixtureBuffer)).toEqual(parsed)
     })
 
     it('should write EXH header correctly', () => {
-      const buffer = new SmartBuffer()
-      writeExhHeader(buffer, parsed)
-
-      expect(buffer.toBuffer()).toEqual(fixtureBuffer)
+      const buffer = writeExhHeader(parsed)
+      expect(buffer).toEqual(fixtureBuffer)
     })
 
     it('should round-trip read and write correctly', () => {
@@ -86,14 +81,10 @@ describe('Excel EXH Header Structs', () => {
       }
 
       // Write header
-      const writeBuffer = new SmartBuffer()
-      writeExhHeader(writeBuffer, originalHeader)
-      const writtenData = writeBuffer.toBuffer()
+      const buffer = writeExhHeader(originalHeader)
 
       // Read header back
-      const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readHeader = readExhHeader(readBuffer)
-
+      const readHeader = readExhHeader(buffer)
       expect(readHeader.magic).toBe(originalHeader.magic)
       expect(readHeader.version).toBe(originalHeader.version)
       expect(readHeader.dataOffset).toBe(originalHeader.dataOffset)
@@ -133,13 +124,9 @@ describe('Excel EXH Header Structs', () => {
         languages: [],
       }
 
-      const buffer = new SmartBuffer()
-      writeExhHeader(buffer, header)
-      const writtenData = buffer.toBuffer()
+      const buffer = writeExhHeader(header)
 
-      const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readHeader = readExhHeader(readBuffer)
-
+      const readHeader = readExhHeader(buffer)
       expect(readHeader.columnCount).toBe(0)
       expect(readHeader.pageCount).toBe(0)
       expect(readHeader.languageCount).toBe(0)
@@ -178,13 +165,9 @@ describe('Excel EXH Header Structs', () => {
         languages: [Language.English],
       }
 
-      const buffer = new SmartBuffer()
-      writeExhHeader(buffer, header)
-      const writtenData = buffer.toBuffer()
+      const buffer = writeExhHeader(header)
 
-      const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readHeader = readExhHeader(readBuffer)
-
+      const readHeader = readExhHeader(buffer)
       expect(readHeader.columns).toEqual(columns)
     })
 
@@ -215,13 +198,9 @@ describe('Excel EXH Header Structs', () => {
           languages: [Language.English],
         }
 
-        const buffer = new SmartBuffer()
-        writeExhHeader(buffer, header)
-        const writtenData = buffer.toBuffer()
+        const buffer = writeExhHeader(header)
 
-        const readBuffer = SmartBuffer.fromBuffer(writtenData)
-        const readHeader = readExhHeader(readBuffer)
-
+        const readHeader = readExhHeader(buffer)
         expect(readHeader.variant).toBe(variant)
       }
     })

@@ -1,4 +1,4 @@
-import type { SmartBuffer } from 'smart-buffer'
+import { SmartBuffer } from 'smart-buffer'
 import type { Language } from '../../interface'
 
 export enum ExcelVariant {
@@ -71,7 +71,8 @@ export interface ExhHeader {
   languages: Language[]
 }
 
-export const readExhHeader = (buffer: SmartBuffer): ExhHeader => {
+export const readExhHeader = (rawBuffer: Buffer): ExhHeader => {
+  const buffer = SmartBuffer.fromBuffer(rawBuffer)
   const magic = buffer.readString(4)
   const version = buffer.readUInt16BE()
   const dataOffset = buffer.readUInt16BE()
@@ -129,10 +130,14 @@ export const readExhHeader = (buffer: SmartBuffer): ExhHeader => {
 /**
  * Write EXH header structure
  */
-export const writeExhHeader = (
-  buffer: SmartBuffer,
-  header: ExhHeader,
-): void => {
+export const writeExhHeader = (header: ExhHeader): Buffer => {
+  const size =
+    32 +
+    2 * header.columns.length +
+    8 * header.paginations.length +
+    header.languages.length +
+    1
+  const buffer = SmartBuffer.fromSize(size)
   buffer.writeString(header.magic)
   buffer.writeUInt16BE(header.version)
   buffer.writeUInt16BE(header.dataOffset)
@@ -166,4 +171,6 @@ export const writeExhHeader = (
 
   // Original file has a padding of 0x00
   buffer.writeUInt8(0)
+
+  return buffer.toBuffer()
 }
