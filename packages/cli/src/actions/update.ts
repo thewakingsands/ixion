@@ -1,9 +1,8 @@
 import type { PatchEntry } from '@ffcafe/ixion-server'
 import { servers } from '@ffcafe/ixion-server'
-import { StorageManager } from '@ffcafe/ixion-storage'
 import { bootVersion } from '../config.js'
-import { readConfig } from '../utils/config.js'
 import { downloadPatch } from '../utils/download.js'
+import { getStorageManager } from '../utils/storage.js'
 import { createVersionFromPatches } from './create-version'
 import { CurrentVersion } from './current-version'
 
@@ -23,8 +22,7 @@ export const updateCommand = async (options: UpdateOptions) => {
     }
 
     // Create storage manager from config
-    const config = readConfig()
-    const storageManager = new StorageManager(config.storages)
+    const storageManager = getStorageManager()
 
     const currentVersion = await CurrentVersion.create(
       storageManager,

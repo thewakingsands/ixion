@@ -1,8 +1,7 @@
-import { StorageManager } from '@ffcafe/ixion-storage'
 import type { Command } from 'commander'
 import { createVersionFromPatches } from '../actions/create-version'
 import { files } from '../config'
-import { readConfig } from '../utils/config'
+import { getStorageManager } from '../utils/storage'
 
 export function registerPatchCommand(program: Command) {
   program
@@ -36,8 +35,7 @@ export function registerPatchCommand(program: Command) {
         }
 
         // Create storage manager from config
-        const config = readConfig()
-        const storageManager = new StorageManager(config.storages)
+        const storageManager = getStorageManager()
 
         await createVersionFromPatches(storageManager, {
           server: options.server,

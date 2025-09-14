@@ -1,19 +1,5 @@
-import { StorageManager } from '@ffcafe/ixion-storage'
 import type { Command } from 'commander'
-import { readConfig } from '../utils/config.js'
-
-/**
- * Get a configured StorageManager instance
- */
-function getStorageManager(): StorageManager {
-  try {
-    const config = readConfig()
-    return new StorageManager(config.storages)
-  } catch (error) {
-    console.error('❌ Configuration error:', error)
-    process.exit(1)
-  }
-}
+import { getStorageManager } from '../utils/storage.js'
 
 export const registerStorageCommand = (program: Command) => {
   const storageCmd = program
