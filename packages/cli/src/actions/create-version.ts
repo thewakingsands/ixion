@@ -1,11 +1,10 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
-import { mkdtemp } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { StorageManager } from '@ffcafe/ixion-storage'
 import { ZipatchReader } from '@ffcafe/ixion-zipatch'
 import { baseGameVersion, files } from '../config'
 import { readGameVersion } from '../utils/game'
-import { getVersionDir } from '../utils/root'
+import { getTempDir, getVersionDir } from '../utils/root'
 
 /**
  * Create a new version from patches
@@ -48,7 +47,7 @@ export async function createVersionFromPatches(
   console.log(`Applying ${patches.length} patch(es)`)
 
   // 1. Create a workspace dir in temp dir
-  const workspaceDir = await mkdtemp(join(process.cwd(), 'temp-'))
+  const workspaceDir = await getTempDir()
   console.log(`Created workspace: ${workspaceDir}`)
 
   try {

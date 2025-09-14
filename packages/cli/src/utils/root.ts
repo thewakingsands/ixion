@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { mkdtemp } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export function getWorkingDir() {
@@ -14,4 +15,9 @@ export function getWorkingDir() {
 export function getVersionDir(version: string) {
   const cwd = getWorkingDir()
   return join(cwd, 'versions', version)
+}
+
+export async function getTempDir() {
+  const cwd = getWorkingDir()
+  return mkdtemp(join(cwd, 'temp-'))
 }
