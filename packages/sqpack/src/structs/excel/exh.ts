@@ -103,7 +103,7 @@ export const readExhHeader = (rawBuffer: Buffer): ExhHeader => {
 
   const languages: Language[] = []
   for (let i = 0; i < languageCount; i++) {
-    const language = buffer.readUInt8()
+    const language = buffer.readUInt16LE()
     languages.push(language)
   }
 
@@ -135,8 +135,7 @@ export const writeExhHeader = (header: ExhHeader): Buffer => {
     32 +
     2 * header.columns.length +
     8 * header.paginations.length +
-    header.languages.length +
-    1
+    2 * header.languages.length
   const buffer = SmartBuffer.fromSize(size)
   buffer.writeString(header.magic)
   buffer.writeUInt16BE(header.version)
@@ -166,11 +165,8 @@ export const writeExhHeader = (header: ExhHeader): Buffer => {
 
   // Write languages
   for (const language of header.languages) {
-    buffer.writeUInt8(language)
+    buffer.writeUInt16LE(language)
   }
-
-  // Original file has a padding of 0x00
-  buffer.writeUInt8(0)
 
   return buffer.toBuffer()
 }

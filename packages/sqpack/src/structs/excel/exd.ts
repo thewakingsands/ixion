@@ -10,6 +10,7 @@ const languageSuffix: Partial<Record<Language, string>> = {
   [Language.ChineseSimplified]: '_chs',
   [Language.ChineseTraditional]: '_cht',
   [Language.Korean]: '_kr',
+  [Language.ChineseTraditional2]: '_cht',
 }
 
 export function getExdPath(sheet: string, startId: number, language: Language) {

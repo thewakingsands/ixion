@@ -1,5 +1,6 @@
 import { type FileHandle, open, readFile } from 'node:fs/promises'
 import { inflateRawSync } from 'node:zlib'
+import $debug from 'debug'
 import { SmartBuffer } from 'smart-buffer'
 import type { SqPackFileIndex } from './interface'
 import {
@@ -17,10 +18,15 @@ import {
 } from './structs/sqpack-data'
 import {
   type IndexHashData,
+  index2HashTableEntrySize,
+  indexHashTableEntrySize,
   readIndex2HashTableEntry,
   readIndexHashTableEntry,
 } from './structs/sqpack-index'
 import { calculateIndex2Hash, calculateIndexHash } from './utils/hash'
+
+const debug = $debug('ixion:sqpack:reader')
+const uncompressedChunk = 32000
 
 export interface SqPackReaderOptions {
   /**
@@ -77,7 +83,9 @@ export class SqPackReader {
       indexHeader.indexDataOffset + indexHeader.indexDataSize,
     )
     const entryBuffer = SmartBuffer.fromBuffer(indexDataBuffer)
-    const entrySize = this.options.useIndex2 ? 8 : 16 // Index2: 8 bytes, Index: 16 bytes
+    const entrySize = this.options.useIndex2
+      ? index2HashTableEntrySize
+      : indexHashTableEntrySize
 
     while (entryBuffer.remaining() >= entrySize) {
       const entry = this.options.useIndex2
@@ -118,6 +126,13 @@ export class SqPackReader {
     }
 
     // Get or open data file handle
+    debug(
+      'reading file %s from data file %d with offset %d',
+      filePath,
+      fileIndex.dataFileId,
+      fileIndex.offset,
+    )
+
     let handle = this.dataHandles.get(fileIndex.dataFileId)
     if (!handle) {
       const dataPath = `${this.options.prefix}.dat${fileIndex.dataFileId}`
@@ -131,7 +146,7 @@ export class SqPackReader {
     await handle.read(buffer, 0, blockSize, fileIndex.offset)
     const fileHeader = readSqPackFileInfo(SmartBuffer.fromBuffer(buffer))
     if (fileHeader.rawFileSize === 0) {
-      return null
+      throw new Error(`File ${filePath} is empty`)
     }
 
     if (fileHeader.type === FileType.Standard) {
@@ -139,14 +154,14 @@ export class SqPackReader {
     }
 
     // TODO: Handle other file types
-    return null
+    throw new Error(`Unsupported file type: ${fileHeader.type}`)
   }
 
   async readStandardFile(
     handle: FileHandle,
     offset: number,
     fileInfo: SqPackFileInfo,
-  ): Promise<Buffer | null> {
+  ): Promise<Buffer> {
     // Header can be larger than blockSize, so we need to read it again
     const headerBuffer = Buffer.alloc(fileInfo.size)
     await handle.read(headerBuffer, 0, fileInfo.size, offset)
@@ -166,28 +181,48 @@ export class SqPackReader {
       const chunkHeader = readSqPackDataChunkHeader(
         SmartBuffer.fromBuffer(chunkHeaderBuffer),
       )
+
+      const dataOffset = chunkOffset + chunkHeader.size
+      let compressed = true
+
       // chunkInfo.compressedSize is aligned to blockSize
       if (chunkHeader.compressedSize > chunkInfo.compressedSize) {
-        throw new Error('Invalid chunk compressed size')
+        if (chunkHeader.compressedSize === uncompressedChunk) {
+          compressed = false
+        } else {
+          debug('chunkHeader: %j, chunkInfo: %j', chunkHeader, chunkInfo)
+          throw new Error(
+            `Invalid chunk compressed size ${chunkHeader.compressedSize} > ${chunkInfo.compressedSize}`,
+          )
+        }
       }
+
       if (chunkHeader.uncompressedSize !== chunkInfo.uncompressedSize) {
-        throw new Error('Invalid chunk uncompressed size')
-      }
-      const chunk = Buffer.alloc(chunkInfo.compressedSize)
-      await handle.read(
-        chunk,
-        0,
-        chunkInfo.compressedSize,
-        chunkOffset + chunkHeader.size,
-      )
-
-      const inflated = inflateRawSync(chunk)
-      if (inflated.length !== chunkInfo.uncompressedSize) {
-        throw new Error('Invalid file size')
+        debug('chunkHeader: %j, chunkInfo: %j', chunkHeader, chunkInfo)
+        throw new Error(
+          `Invalid chunk uncompressed size ${chunkHeader.uncompressedSize} !== ${chunkInfo.uncompressedSize}`,
+        )
       }
 
-      chunks.push(inflated)
-      bytesRead += inflated.length
+      const size = compressed
+        ? chunkHeader.compressedSize
+        : chunkHeader.uncompressedSize
+      // debug('reading chunk %d, offset %d, size %d', i, dataOffset, size)
+      const chunk = Buffer.alloc(size)
+      await handle.read(chunk, 0, size, dataOffset)
+
+      if (compressed) {
+        const inflated = inflateRawSync(chunk)
+        if (inflated.length !== chunkInfo.uncompressedSize) {
+          throw new Error('Invalid file size')
+        }
+
+        chunks.push(inflated)
+        bytesRead += inflated.length
+      } else {
+        chunks.push(chunk)
+        bytesRead += chunk.length
+      }
     }
 
     if (bytesRead !== fileInfo.rawFileSize) {
