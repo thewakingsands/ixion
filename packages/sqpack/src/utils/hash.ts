@@ -1,5 +1,7 @@
 // CRC32 implementation without external dependencies
 
+import { createHash } from 'node:crypto'
+
 /**
  * CRC32 table for fast CRC32 calculation
  */
@@ -70,4 +72,27 @@ export const calculateIndex2Hash = (filePath: string): number => {
 
   // Calculate CRC32 of entire path
   return crc32(path)
+}
+
+export const sqPackHashSize = 0x40
+
+/**
+ * Calculate SHA1 hash
+ */
+export const calculateSqPackHash = (input: Buffer): Buffer => {
+  const buffer = Buffer.alloc(sqPackHashSize)
+  const hash = createHash('sha1').update(input).digest()
+  buffer.set(hash)
+
+  return buffer
+}
+
+/**
+ * Parse SHA1 hash from hex string
+ */
+export const parseSqPackHashFromHex = (input: string): Buffer => {
+  const buffer = Buffer.alloc(sqPackHashSize)
+  buffer.set(Buffer.from(input, 'hex'))
+
+  return buffer
 }

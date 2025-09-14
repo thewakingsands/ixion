@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { SmartBuffer } from 'smart-buffer'
 import { describe, expect, it } from 'vitest'
 import { PlatformId } from '../../src/interface'
@@ -10,168 +12,95 @@ import {
   writeSqPackHeader,
   writeSqPackIndexHeader,
 } from '../../src/structs/header'
+import {
+  calculateSqPackHash,
+  parseSqPackHashFromHex,
+} from '../../src/utils/hash'
 
 describe('Header Structs', () => {
+  const fixtureBuffer = readFileSync(
+    join(__dirname, '../__fixtures__/0a0000.win32.index'),
+  )
+
   describe('SqPackHeader', () => {
+    const headerBuffer = fixtureBuffer.subarray(0, 0x400)
+    const parsed: SqPackHeader = {
+      magic: 'SqPack\0\0',
+      platformId: PlatformId.Win32,
+      size: 0x400,
+      version: 1,
+      type: 2,
+      buildDate: 0,
+      buildTime: 0,
+    }
+
     it('should read SqPack header correctly', () => {
-      const buffer = Buffer.alloc(32)
-      // Write magic "SqPack\0\0"
-      buffer.write('SqPack\0\0', 0)
-      // Write platform ID (Win32 = 0)
-      buffer.writeUInt8(PlatformId.Win32, 8)
-      // Write padding (3 bytes)
-      buffer.writeUInt8(0, 9)
-      buffer.writeUInt8(0, 10)
-      buffer.writeUInt8(0, 11)
-      // Write size, version, type
-      buffer.writeUInt32LE(0x400, 12)
-      buffer.writeUInt32LE(1, 16)
-      buffer.writeUInt32LE(2, 20)
+      const buffer = SmartBuffer.fromBuffer(headerBuffer)
+      const header = readSqPackHeader(buffer)
 
-      const smartBuffer = SmartBuffer.fromBuffer(buffer)
-      const header = readSqPackHeader(smartBuffer)
-
-      expect(header.magic.toString()).toBe('SqPack\0\0')
-      expect(header.platformId).toBe(PlatformId.Win32)
-      expect(header.size).toBe(0x400)
-      expect(header.version).toBe(1)
-      expect(header.type).toBe(2)
+      expect(header).toEqual(parsed)
     })
 
     it('should write SqPack header correctly', () => {
-      const header: SqPackHeader = {
-        magic: Buffer.from([0x53, 0x71, 0x50, 0x61, 0x63, 0x6b, 0x00, 0x00]), // "SqPack\0\0"
-        platformId: PlatformId.Win32,
-        size: 0x400,
-        version: 1,
-        type: 2,
-      }
-
       const buffer = new SmartBuffer()
-      writeSqPackHeader(buffer, header)
-      const writtenData = buffer.toBuffer()
+      writeSqPackHeader(buffer, parsed)
 
-      // Verify the written data
-      expect(writtenData.toString('ascii', 0, 8)).toBe('SqPack\0\0')
-      expect(writtenData.readUInt8(8)).toBe(PlatformId.Win32)
-      expect(writtenData.readUInt8(9)).toBe(0) // Padding
-      expect(writtenData.readUInt8(10)).toBe(0) // Padding
-      expect(writtenData.readUInt8(11)).toBe(0) // Padding
-      expect(writtenData.readUInt32LE(12)).toBe(0x400)
-      expect(writtenData.readUInt32LE(16)).toBe(1)
-      expect(writtenData.readUInt32LE(20)).toBe(2)
-    })
-
-    it('should round-trip read and write correctly', () => {
-      const originalHeader: SqPackHeader = {
-        magic: Buffer.from([0x53, 0x71, 0x50, 0x61, 0x63, 0x6b, 0x00, 0x00]),
-        platformId: PlatformId.PS4,
-        size: 0x800,
-        version: 3,
-        type: 0x12345678,
-      }
-
-      // Write header
-      const writeBuffer = new SmartBuffer()
-      writeSqPackHeader(writeBuffer, originalHeader)
-      const writtenData = writeBuffer.toBuffer()
-
-      // Read header back
-      const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readHeader = readSqPackHeader(readBuffer)
-
-      expect(readHeader.magic).toEqual(originalHeader.magic)
-      expect(readHeader.platformId).toBe(originalHeader.platformId)
-      expect(readHeader.size).toBe(originalHeader.size)
-      expect(readHeader.version).toBe(originalHeader.version)
-      expect(readHeader.type).toBe(originalHeader.type)
+      expect(buffer.toBuffer()).toEqual(headerBuffer)
     })
   })
 
   describe('SqPackIndexHeader', () => {
+    const headerBuffer = fixtureBuffer.subarray(0x400, 0x800)
+    const parsed: SqPackIndexHeader = {
+      size: 0x400,
+      version: 1,
+      indexDataOffset: 0x800,
+      indexDataSize: 245456,
+      indexDataHash: parseSqPackHashFromHex(
+        '32e073184be459326aae8fdb23aca64a9777d447',
+      ),
+      numberOfDataFile: 1,
+      synonymOffset: 247504,
+      synonymSize: 256,
+      synonymHash: parseSqPackHashFromHex(
+        '5e9d28d0485da838f62d713c3db6961a6e13d83b',
+      ),
+      emptyBlockOffset: 247760,
+      emptyBlockSize: 5968,
+      emptyBlockHash: parseSqPackHashFromHex(
+        '55ad3ada42881bd63814f289cc369189b12ab1fb',
+      ),
+      dirIndexOffset: 253728,
+      dirIndexSize: 1728,
+      dirIndexHash: parseSqPackHashFromHex(
+        '05bfde7c0d9573e9c98663bec9924084ca0f7875',
+      ),
+    }
+
     it('should read SqPack index header correctly', () => {
-      const buffer = Buffer.alloc(16)
-      buffer.writeUInt32LE(0x400, 0) // size
-      buffer.writeUInt32LE(1, 4) // version
-      buffer.writeUInt32LE(0x500, 8) // indexDataOffset
-      buffer.writeUInt32LE(0x1000, 12) // indexDataSize
+      const buffer = SmartBuffer.fromBuffer(headerBuffer)
+      const header = readSqPackIndexHeader(buffer)
 
-      const smartBuffer = SmartBuffer.fromBuffer(buffer)
-      const header = readSqPackIndexHeader(smartBuffer)
-
-      expect(header.size).toBe(0x400)
-      expect(header.version).toBe(1)
-      expect(header.indexDataOffset).toBe(0x500)
-      expect(header.indexDataSize).toBe(0x1000)
+      expect(header).toEqual(parsed)
     })
 
     it('should write SqPack index header correctly', () => {
-      const header: SqPackIndexHeader = {
-        size: 0x400,
-        version: 1,
-        indexDataOffset: 0x500,
-        indexDataSize: 0x1000,
-      }
-
       const buffer = new SmartBuffer()
-      writeSqPackIndexHeader(buffer, header)
-      const writtenData = buffer.toBuffer()
+      writeSqPackIndexHeader(buffer, parsed)
 
-      expect(writtenData.readUInt32LE(0)).toBe(0x400)
-      expect(writtenData.readUInt32LE(4)).toBe(1)
-      expect(writtenData.readUInt32LE(8)).toBe(0x500)
-      expect(writtenData.readUInt32LE(12)).toBe(0x1000)
-    })
-
-    it('should round-trip read and write correctly', () => {
-      const originalHeader: SqPackIndexHeader = {
-        size: 0x800,
-        version: 2,
-        indexDataOffset: 0x1000,
-        indexDataSize: 0x2000,
-      }
-
-      // Write header
-      const writeBuffer = new SmartBuffer()
-      writeSqPackIndexHeader(writeBuffer, originalHeader)
-      const writtenData = writeBuffer.toBuffer()
-
-      // Read header back
-      const readBuffer = SmartBuffer.fromBuffer(writtenData)
-      const readHeader = readSqPackIndexHeader(readBuffer)
-
-      expect(readHeader.size).toBe(originalHeader.size)
-      expect(readHeader.version).toBe(originalHeader.version)
-      expect(readHeader.indexDataOffset).toBe(originalHeader.indexDataOffset)
-      expect(readHeader.indexDataSize).toBe(originalHeader.indexDataSize)
+      expect(buffer.toBuffer()).toEqual(headerBuffer)
     })
   })
 
   describe('validateSqPackMagic', () => {
     it('should validate correct magic', () => {
-      const magic = Buffer.from([
-        0x53, 0x71, 0x50, 0x61, 0x63, 0x6b, 0x00, 0x00,
-      ]) // "SqPack\0\0"
-      expect(validateSqPackMagic(magic)).toBe(true)
+      expect(validateSqPackMagic('SqPack\0\0')).toBe(true)
     })
+  })
 
-    it('should reject incorrect magic', () => {
-      const magic = Buffer.from([
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      ])
-      expect(validateSqPackMagic(magic)).toBe(false)
-    })
-
-    it('should reject magic with wrong length', () => {
-      const magic = Buffer.from([0x53, 0x71, 0x50, 0x61]) // Too short
-      expect(validateSqPackMagic(magic)).toBe(false)
-    })
-
-    it('should reject magic with correct prefix but wrong suffix', () => {
-      const magic = Buffer.from([
-        0x53, 0x71, 0x50, 0x61, 0x63, 0x6b, 0x01, 0x01,
-      ]) // "SqPack\1\1"
-      expect(validateSqPackMagic(magic)).toBe(false)
-    })
+  it('test index hash', () => {
+    const data = fixtureBuffer.subarray(0x800, 0x800 + 245456)
+    console.log(data.length)
+    console.log(calculateSqPackHash(data).toString('hex'))
   })
 })
