@@ -1,5 +1,3 @@
-// CRC32 implementation without external dependencies
-
 import { createHash } from 'node:crypto'
 
 /**
