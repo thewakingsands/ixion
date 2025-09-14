@@ -125,3 +125,45 @@ export const readExhHeader = (buffer: SmartBuffer): ExhHeader => {
     languages,
   }
 }
+
+/**
+ * Write EXH header structure
+ */
+export const writeExhHeader = (
+  buffer: SmartBuffer,
+  header: ExhHeader,
+): void => {
+  buffer.writeString(header.magic)
+  buffer.writeUInt16BE(header.version)
+  buffer.writeUInt16BE(header.dataOffset)
+  buffer.writeUInt16BE(header.columnCount)
+  buffer.writeUInt16BE(header.pageCount)
+  buffer.writeUInt16BE(header.languageCount)
+  buffer.writeUInt16BE(header.unknown1)
+  buffer.writeUInt8(header.u2)
+  buffer.writeUInt8(header.variant)
+  buffer.writeUInt16BE(header.u3)
+  buffer.writeUInt32BE(header.rowCount)
+  buffer.writeUInt32BE(header.u4)
+  buffer.writeUInt32BE(header.u5)
+
+  // Write columns
+  for (const column of header.columns) {
+    buffer.writeUInt16BE(column.type)
+    buffer.writeUInt16BE(column.offset)
+  }
+
+  // Write paginations
+  for (const pagination of header.paginations) {
+    buffer.writeUInt32BE(pagination.startId)
+    buffer.writeUInt32BE(pagination.rowCount)
+  }
+
+  // Write languages
+  for (const language of header.languages) {
+    buffer.writeUInt8(language)
+  }
+
+  // Original file has a padding of 0x00
+  buffer.writeUInt8(0)
+}

@@ -58,6 +58,36 @@ export const readSqPackIndexHeader = (
 }
 
 /**
+ * Write SqPack header structure
+ */
+export const writeSqPackHeader = (
+  buffer: SmartBuffer,
+  header: SqPackHeader,
+): void => {
+  buffer.writeBuffer(header.magic)
+  buffer.writeUInt8(header.platformId)
+  buffer.writeUInt8(0) // Padding
+  buffer.writeUInt8(0) // Padding
+  buffer.writeUInt8(0) // Padding
+  buffer.writeUInt32LE(header.size)
+  buffer.writeUInt32LE(header.version)
+  buffer.writeUInt32LE(header.type)
+}
+
+/**
+ * Write SqPack index header structure
+ */
+export const writeSqPackIndexHeader = (
+  buffer: SmartBuffer,
+  header: SqPackIndexHeader,
+): void => {
+  buffer.writeUInt32LE(header.size)
+  buffer.writeUInt32LE(header.version)
+  buffer.writeUInt32LE(header.indexDataOffset)
+  buffer.writeUInt32LE(header.indexDataSize)
+}
+
+/**
  * Validate SqPack magic bytes
  */
 export const validateSqPackMagic = (magic: Buffer): boolean => {

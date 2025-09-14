@@ -73,3 +73,42 @@ export const readSqPackStandardBlockInfo = (
 
   return { offset, compressedSize, uncompressedSize }
 }
+
+/**
+ * Write SqPack file info structure
+ */
+export const writeSqPackFileInfo = (
+  buffer: SmartBuffer,
+  fileInfo: SqPackFileInfo,
+): void => {
+  buffer.writeUInt32LE(fileInfo.size)
+  buffer.writeUInt32LE(fileInfo.type)
+  buffer.writeUInt32LE(fileInfo.rawFileSize)
+  buffer.writeUInt32LE(fileInfo.numberOfBlocks)
+  buffer.writeUInt32LE(fileInfo.usedNumberOfBlocks)
+}
+
+/**
+ * Write SqPack data block header structure
+ */
+export const writeSqPackDataBlockHeader = (
+  buffer: SmartBuffer,
+  blockHeader: SqPackDataBlockHeader,
+): void => {
+  buffer.writeUInt32LE(blockHeader.size)
+  buffer.writeUInt32LE(blockHeader.__unknown)
+  buffer.writeUInt32LE(blockHeader.compressedSize)
+  buffer.writeUInt32LE(blockHeader.uncompressedSize)
+}
+
+/**
+ * Write SqPack standard block info structure
+ */
+export const writeSqPackStandardBlockInfo = (
+  buffer: SmartBuffer,
+  blockInfo: SqPackStandardBlockInfo,
+): void => {
+  buffer.writeUInt32LE(blockInfo.offset)
+  buffer.writeUInt16LE(blockInfo.compressedSize)
+  buffer.writeUInt16LE(blockInfo.uncompressedSize)
+}

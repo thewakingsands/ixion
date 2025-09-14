@@ -3,15 +3,12 @@ import { mergeIndexHash } from '../utils/hash'
 
 export interface IndexHashData {
   isSynonym: boolean
-  dataFileId: number // 3 bits
-  offset: number // 28 bits
-  padding: number // 32 bits
+  dataFileId: number
+  offset: number
 }
 
 export interface IndexHashTableEntry extends IndexHashData {
   hash: bigint // 64-bit hash (directoryHash + filenameHash)
-  fileHash: number // 32-bit hash (directoryHash)
-  dirHash: number // 32-bit hash (filenameHash)
 }
 
 export interface Index2HashTableEntry extends IndexHashData {
@@ -22,9 +19,19 @@ const parseData = (data: number): IndexHashData => {
   const isSynonym = data % 2 === 1
   const dataFileId = (data % 8) >> 1
   const offset = (data - (data % 16)) * 8
-  const padding = data % 2
 
-  return { isSynonym, dataFileId, offset, padding }
+  return { isSynonym, dataFileId, offset }
+}
+
+/**
+ * Encode index data into the format used in index files
+ */
+const encodeIndexData = (data: IndexHashData): number => {
+  const offset = Math.floor(data.offset / 8)
+  const dataFileId = (data.dataFileId % 8) * 2
+  const isSynonym = data.isSynonym ? 1 : 0
+
+  return offset - (offset % 16) + dataFileId + isSynonym
 }
 
 /**
@@ -41,8 +48,6 @@ export const readIndexHashTableEntry = (
 
   return {
     hash: mergeIndexHash(dirHash, fileHash),
-    fileHash,
-    dirHash,
     ...parseData(data),
   }
 }
@@ -61,4 +66,27 @@ export const readIndex2HashTableEntry = (
     hash,
     ...parseData(data),
   }
+}
+
+/**
+ * Write index hash table entry (index files)
+ */
+export const writeIndexHashTableEntry = (
+  buffer: SmartBuffer,
+  entry: IndexHashTableEntry,
+): void => {
+  buffer.writeBigUInt64LE(entry.hash)
+  buffer.writeUInt32LE(encodeIndexData(entry))
+  buffer.writeUInt32LE(0) // Padding
+}
+
+/**
+ * Write index2 hash table entry (index2 files)
+ */
+export const writeIndex2HashTableEntry = (
+  buffer: SmartBuffer,
+  entry: Index2HashTableEntry,
+): void => {
+  buffer.writeUInt32LE(entry.hash)
+  buffer.writeUInt32LE(encodeIndexData(entry))
 }

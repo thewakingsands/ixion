@@ -14,7 +14,7 @@ const languageSuffix: Partial<Record<Language, string>> = {
 
 export function getExdPath(sheet: string, startId: number, language: Language) {
   const suffix = languageSuffix[language]
-  if (!suffix) {
+  if (typeof suffix !== 'string') {
     throw new Error(`Invalid language: ${language}`)
   }
 
@@ -53,4 +53,30 @@ export const readExcelDataHeader = (buffer: SmartBuffer): ExcelDataHeader => {
   }
 
   return { magic, version, u1, indexSize, dataSize, offsetMap }
+}
+
+/**
+ * Write Excel data header structure
+ */
+export const writeExcelDataHeader = (
+  buffer: SmartBuffer,
+  header: ExcelDataHeader,
+): void => {
+  buffer.writeString(header.magic)
+  buffer.writeUInt16BE(header.version)
+  buffer.writeUInt16BE(header.u1)
+  buffer.writeUInt32BE(header.indexSize)
+  buffer.writeUInt32BE(header.dataSize)
+
+  // Write 16 bytes of padding
+  buffer.writeUInt32BE(0)
+  buffer.writeUInt32BE(0)
+  buffer.writeUInt32BE(0)
+  buffer.writeUInt32BE(0)
+
+  // Write offset map
+  for (const [rowId, offset] of header.offsetMap) {
+    buffer.writeUInt32BE(rowId)
+    buffer.writeUInt32BE(offset)
+  }
 }
