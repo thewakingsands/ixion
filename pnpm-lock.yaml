@@ -70,6 +70,9 @@ importers:
       '@ffcafe/ixion-server':
         specifier: workspace:*
         version: link:../server
+      '@ffcafe/ixion-sqpack':
+        specifier: workspace:*
+        version: link:../sqpack
       '@ffcafe/ixion-storage':
         specifier: workspace:*
         version: link:../storage

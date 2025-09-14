@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@ffcafe/ixion-server": "workspace:*",
+    "@ffcafe/ixion-sqpack": "workspace:*",
     "@ffcafe/ixion-storage": "workspace:*",
     "@ffcafe/ixion-zipatch": "workspace:*",
     "commander": "^14.0.0",
