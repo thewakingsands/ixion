@@ -3,21 +3,14 @@ import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 
 /**
- * Create a filter function for root-only EXD files
- */
-function isRootFile(path: string): boolean {
-  return path.indexOf('/', 4) === -1
-}
-
-/**
- * Create a filter function for name-based filtering
+ * Create filter function
  */
 function createFilter(
   keywords?: string[],
   rootOnly?: boolean,
 ): (path: string) => boolean {
   return (path: string) => {
-    if (rootOnly && !isRootFile(path)) {
+    if (rootOnly && path.includes('/')) {
       return false
     }
 
