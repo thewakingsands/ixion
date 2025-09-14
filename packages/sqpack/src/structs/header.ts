@@ -31,6 +31,18 @@ export interface SqPackIndexHeader {
   dirIndexHash: Buffer
 }
 
+export interface SqPackDataHeader {
+  size: number
+  version: number
+  blockOffset: number
+  blockCount: number
+  u2: number
+  u3: number
+  maxDataSize: number
+  u4: number
+  fileHash: Buffer
+}
+
 export enum SqPackType {
   Data = 1,
   Index = 2,
@@ -108,6 +120,32 @@ export const readSqPackIndexHeader = (
 }
 
 /**
+ * SqPack data header structure
+ */
+export const readSqPackDataHeader = (buffer: SmartBuffer): SqPackDataHeader => {
+  const size = buffer.readUInt32LE()
+  const version = buffer.readUInt32LE()
+  const blockOffset = buffer.readUInt32LE()
+  const blockCount = buffer.readUInt32LE()
+  const u2 = buffer.readUInt32LE()
+  const u3 = buffer.readUInt32LE()
+  const maxDataSize = buffer.readUInt32LE()
+  const u4 = buffer.readUInt32LE()
+  const fileHash = buffer.readBuffer(sqPackHashSize)
+  return {
+    size,
+    version,
+    blockOffset,
+    blockCount,
+    u2,
+    u3,
+    maxDataSize,
+    u4,
+    fileHash,
+  }
+}
+
+/**
  * Write SqPack header structure
  */
 export const writeSqPackHeader = (
@@ -174,6 +212,35 @@ export const writeSqPackIndexHeader = (
   innerBuffer.writeUInt32LE(header.dirIndexOffset)
   innerBuffer.writeUInt32LE(header.dirIndexSize)
   innerBuffer.writeBuffer(header.dirIndexHash)
+
+  // write hash
+  const bufferToHash = headerBuffer.subarray(0, hashOffset)
+  const hash = calculateSqPackHash(bufferToHash)
+
+  innerBuffer.writeOffset = hashOffset
+  innerBuffer.writeBuffer(hash)
+
+  buffer.writeBuffer(headerBuffer)
+}
+
+/**
+ * Write SqPack data header structure
+ */
+export const writeSqPackDataHeader = (
+  buffer: SmartBuffer,
+  header: SqPackDataHeader,
+): void => {
+  const headerBuffer = Buffer.alloc(headerSize)
+  const innerBuffer = SmartBuffer.fromBuffer(headerBuffer)
+  innerBuffer.writeUInt32LE(header.size)
+  innerBuffer.writeUInt32LE(header.version)
+  innerBuffer.writeUInt32LE(header.blockOffset)
+  innerBuffer.writeUInt32LE(header.blockCount)
+  innerBuffer.writeUInt32LE(header.u2)
+  innerBuffer.writeUInt32LE(header.u3)
+  innerBuffer.writeUInt32LE(header.maxDataSize)
+  innerBuffer.writeUInt32LE(header.u4)
+  innerBuffer.writeBuffer(header.fileHash)
 
   // write hash
   const bufferToHash = headerBuffer.subarray(0, hashOffset)

@@ -4,18 +4,18 @@ import { SmartBuffer } from 'smart-buffer'
 import { describe, expect, it } from 'vitest'
 import { PlatformId } from '../../src/interface'
 import {
+  readSqPackDataHeader,
   readSqPackHeader,
   readSqPackIndexHeader,
+  type SqPackDataHeader,
   type SqPackHeader,
   type SqPackIndexHeader,
   validateSqPackMagic,
+  writeSqPackDataHeader,
   writeSqPackHeader,
   writeSqPackIndexHeader,
 } from '../../src/structs/header'
-import {
-  calculateSqPackHash,
-  parseSqPackHashFromHex,
-} from '../../src/utils/hash'
+import { parseSqPackHashFromHex } from '../../src/utils/hash'
 
 describe('Header Structs', () => {
   const fixtureBuffer = readFileSync(
@@ -98,9 +98,35 @@ describe('Header Structs', () => {
     })
   })
 
-  it('test index hash', () => {
-    const data = fixtureBuffer.subarray(0x800, 0x800 + 245456)
-    console.log(data.length)
-    console.log(calculateSqPackHash(data).toString('hex'))
+  describe('SqPackDataHeader', () => {
+    const datBuffer = readFileSync(
+      join(__dirname, '../__fixtures__/0a0000.win32.dat0_header'),
+    )
+
+    const parsed: SqPackDataHeader = {
+      size: 0x400,
+      version: 0,
+      blockOffset: 16,
+      blockCount: 935396,
+      u2: 1,
+      u3: 0,
+      maxDataSize: 2000000000,
+      u4: 0,
+      fileHash: parseSqPackHashFromHex(
+        '1ddfea2974b17fad6a8d1c0b3afc959f4fc9b49b',
+      ),
+    }
+
+    it('should read SqPack data header correctly', () => {
+      const buffer = SmartBuffer.fromBuffer(datBuffer.subarray(0x400, 0x800))
+      const header = readSqPackDataHeader(buffer)
+      expect(header).toEqual(parsed)
+    })
+
+    it('should write SqPack data header correctly', () => {
+      const buffer = new SmartBuffer()
+      writeSqPackDataHeader(buffer, parsed)
+      expect(buffer.toBuffer()).toEqual(datBuffer.subarray(0x400, 0x800))
+    })
   })
 })
