@@ -57,7 +57,7 @@ const addFileHandler = async (
   buffer: SmartBuffer,
   fs: FileSystem,
 ) => {
-  const handle = await fs.getFileHandle(fileHeader.filePath, true)
+  const handle = await fs.getFileHandle(fileHeader.filePath)
   if (!handle) {
     return
   }
