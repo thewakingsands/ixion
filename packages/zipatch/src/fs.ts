@@ -1,3 +1,4 @@
+import { existsSync, writeFileSync } from 'node:fs'
 import { type FileHandle, mkdir, open, rmdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import $debug from 'debug'
@@ -17,11 +18,14 @@ export class FileSystem {
    * Close all open file handles
    */
   async close(): Promise<void> {
-    const closePromises = Array.from(this.fileHandles.values()).map((handle) =>
-      handle.close().catch((e) => {
-        // Silently ignore close errors
-        console.error('Error closing file: %s', e)
-      }),
+    const closePromises = Array.from(this.fileHandles.entries()).map(
+      ([path, handle]) => {
+        debug('close %s', path)
+        return handle.close().catch((e) => {
+          // Silently ignore close errors
+          console.error('Error closing file: %s', e)
+        })
+      },
     )
     await Promise.all(closePromises)
     this.fileHandles.clear()
@@ -35,22 +39,9 @@ export class FileSystem {
   }
 
   /**
-   * Open a file
-   */
-  async openFile(path: string, create = false) {
-    debug('open %s with create %s', path, create)
-
-    const fullPath = join(this.root, path)
-    const handle = await open(fullPath, create ? 'w+' : 'r+')
-    this.fileHandles.set(path, handle)
-
-    return handle
-  }
-
-  /**
    * Get file handle for either a string path or SqpkFile, opening it if necessary
    */
-  async getFileHandle(path: string, create = true): Promise<FileHandle | null> {
+  async getFileHandle(path: string): Promise<FileHandle | null> {
     if (!this.isPathAllowed(path)) {
       return null
     }
@@ -60,7 +51,7 @@ export class FileSystem {
     }
 
     await this.createDirectory(dirname(path))
-    return this.openFile(path, create)
+    return this.openFile(path)
   }
 
   /**
@@ -116,5 +107,24 @@ export class FileSystem {
     const fullPath = join(this.root, path)
     debug('rmdir %s', fullPath)
     await rmdir(fullPath, { recursive: true })
+  }
+
+  /**
+   * Open a file
+   */
+  private async openFile(path: string) {
+    const fullPath = join(this.root, path)
+
+    if (!existsSync(fullPath)) {
+      writeFileSync(fullPath, Buffer.alloc(0))
+    }
+
+    const mode = 'r+'
+    debug('open %s with mode %s', path, mode)
+
+    const handle = await open(fullPath, mode)
+    this.fileHandles.set(path, handle)
+
+    return handle
   }
 }
