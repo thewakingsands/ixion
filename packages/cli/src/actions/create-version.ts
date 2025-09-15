@@ -4,7 +4,8 @@ import type { StorageManager } from '@ffcafe/ixion-storage'
 import { ZipatchReader } from '@ffcafe/ixion-zipatch'
 import { baseGameVersion, files } from '../config'
 import { readGameVersion } from '../utils/game'
-import { getTempDir, getVersionDir } from '../utils/root'
+import { getTempDir } from '../utils/root'
+import { getStorageManager } from '../utils/storage'
 
 /**
  * Create a new version from patches
@@ -92,7 +93,11 @@ export async function createVersionFromPatches(
   }
 }
 
-export function createVersionFromGame(gamePath: string) {
+export async function createVersionFromGame(
+  gamePath: string,
+  server: string = 'default',
+  targetStorage?: string,
+) {
   let version = readGameVersion(gamePath)
   if (!version) {
     // try reading from {gamePath}/game
@@ -104,12 +109,49 @@ export function createVersionFromGame(gamePath: string) {
     throw new Error('Not a valid game path')
   }
 
-  const outputDir = getVersionDir(version)
-  mkdirSync(outputDir, { recursive: true })
-  for (const file of files) {
-    mkdirSync(dirname(join(outputDir, file)), { recursive: true })
-    copyFileSync(join(gamePath, file), join(outputDir, file))
+  console.log(`🎮 Recording game version: ${version}`)
+  console.log(`📁 Game path: ${gamePath}`)
 
-    console.log(`${file} saved`)
+  // Get storage manager
+  let storageManager = getStorageManager()
+
+  // Create subset if targeting specific storage
+  if (targetStorage) {
+    storageManager = storageManager.createSubset([targetStorage])
+    console.log(`📦 Targeting storage: ${targetStorage}`)
+  } else {
+    console.log('📦 Targeting all storages')
+  }
+
+  // Create a temporary directory for the version
+  const tempDir = await getTempDir()
+  console.log(`📂 Created temporary directory: ${tempDir}`)
+
+  try {
+    // Copy game files to temporary directory
+    for (const file of files) {
+      const sourcePath = join(gamePath, file)
+      const targetPath = join(tempDir, file)
+
+      if (!existsSync(sourcePath)) {
+        console.warn(`⚠️ File not found: ${file}`)
+        continue
+      }
+
+      mkdirSync(dirname(targetPath), { recursive: true })
+      copyFileSync(sourcePath, targetPath)
+      console.log(`✅ Copied: ${file}`)
+    }
+
+    // Upload to storage
+    console.log(`\n📤 Uploading version ${version} to storage...`)
+    await storageManager.uploadVersion(server, version, tempDir)
+
+    console.log(`✅ Successfully uploaded to storage`)
+    console.log(`\n🎉 Successfully recorded version ${version}`)
+  } finally {
+    // Clean up temporary directory
+    console.log(`\n🧹 Cleaning up temporary directory: ${tempDir}`)
+    rmSync(tempDir, { recursive: true, force: true })
   }
 }
