@@ -54,6 +54,26 @@ export class StorageManager {
   }
 
   /**
+   * Create a new StorageManager with only the specified storages
+   */
+  createSubset(storageNames: string[]): StorageManager {
+    const subsetConfigs: StorageConfig[] = []
+
+    for (const name of storageNames) {
+      const storage = this.storages.get(name)
+      if (!storage) {
+        throw new Error(`Storage '${name}' not found`)
+      }
+
+      // Get the original config from the storage
+      const config = (storage as any).config as StorageConfig
+      subsetConfigs.push(config)
+    }
+
+    return new StorageManager(subsetConfigs)
+  }
+
+  /**
    * Read current version from the default storage
    */
   async readCurrentVersion(server: string): Promise<VersionData | null> {

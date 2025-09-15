@@ -10,6 +10,7 @@ export interface UpdateOptions {
   from?: string
   dryRun?: boolean
   server: string
+  storage?: string
 }
 
 export const updateCommand = async (options: UpdateOptions) => {
@@ -22,7 +23,13 @@ export const updateCommand = async (options: UpdateOptions) => {
     }
 
     // Create storage manager from config
-    const storageManager = getStorageManager()
+    let storageManager = getStorageManager()
+    if (options.storage) {
+      storageManager = storageManager.createSubset([options.storage])
+      console.log(`📦 Targeting storage: ${options.storage}`)
+    } else {
+      console.log('📦 Targeting all storages')
+    }
 
     const currentVersion = await CurrentVersion.create(
       storageManager,

@@ -11,6 +11,10 @@ export const registerUpdateCommand = (program: Command) => {
     )
     .option('--dry-run', 'Show what would be updated without actually updating')
     .option('-s, --server <name>', 'Target server name')
+    .option(
+      '--storage <name>',
+      'Target specific storage (default: all storages)',
+    )
     .action(updateCommand)
 
   return updateCmd
