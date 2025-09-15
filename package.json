@@ -2,8 +2,12 @@
   "name": "@ffcafe/ixion",
   "type": "module",
   "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
     "lefthook": "lefthook",
+    "lint": "biome check --write .",
     "postinstall": "lefthook install",
+    "test": "pnpm -r test",
     "x": "tsx packages/cli/src/index.ts"
   },
   "devDependencies": {
