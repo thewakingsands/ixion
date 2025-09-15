@@ -86,6 +86,7 @@ export const updateCommand = async (options: UpdateOptions) => {
         console.log(
           `  ${index + 1}. ${patch.version} (${formatBytes(patch.patchSize)})`,
         )
+        console.log(`    ${patch.url}`)
       })
       if (Object.keys(latestExpansions).length > 0) {
         console.log('\n📊 Expansion versions that would be updated:')
