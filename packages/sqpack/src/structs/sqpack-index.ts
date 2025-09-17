@@ -17,6 +17,13 @@ export interface Index2HashTableEntry extends IndexHashData {
   hash: number // 32-bit hash (entire path)
 }
 
+export const indexDirectoryHashTableEntrySize = 16
+export interface IndexDirectoryHashTableEntry {
+  dirHash: number // 32-bit hash (directoryHash)
+  offset: number // 32-bit offset
+  length: number
+}
+
 const parseData = (data: number): IndexHashData => {
   const isSynonym = data % 2 === 1
   const dataFileId = (data % 8) >> 1
@@ -91,4 +98,17 @@ export const writeIndex2HashTableEntry = (
 ): void => {
   buffer.writeUInt32LE(entry.hash)
   buffer.writeUInt32LE(encodeIndexData(entry))
+}
+
+/**
+ * Write index directory hash table entry (index files)
+ */
+export const writeIndexDirectoryHashTableEntry = (
+  buffer: SmartBuffer,
+  entry: IndexDirectoryHashTableEntry,
+): void => {
+  buffer.writeUInt32LE(entry.dirHash)
+  buffer.writeUInt32LE(entry.offset)
+  buffer.writeUInt32LE(entry.length)
+  buffer.writeUInt32LE(0) // Padding
 }

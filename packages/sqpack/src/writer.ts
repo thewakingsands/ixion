@@ -28,8 +28,10 @@ import {
   type IndexHashData,
   type IndexHashTableEntry,
   index2HashTableEntrySize,
+  indexDirectoryHashTableEntrySize,
   indexHashTableEntrySize,
   writeIndex2HashTableEntry,
+  writeIndexDirectoryHashTableEntry,
   writeIndexHashTableEntry,
 } from './structs/sqpack-index'
 import {
@@ -267,20 +269,52 @@ export class SqPackWriter {
     // Calculate index data size
     const indexDataSize = this.indexEntries.size * indexHashTableEntrySize
     const indexDataBuffer = SmartBuffer.fromSize(indexDataSize)
-    for (const [hash, indexData] of this.indexEntries) {
-      const entry = hash as bigint
+
+    const indexKeys = Array.from(this.indexEntries.keys()).sort()
+    const dirCount = new Map<number, number>()
+
+    for (const hash of indexKeys) {
+      const indexData = this.indexEntries.get(hash)
+      if (!indexData) {
+        continue
+      }
+
+      const dirHash = Number(hash >> 32n)
+      dirCount.set(dirHash, (dirCount.get(dirHash) ?? 0) + 1)
 
       const indexEntry: IndexHashTableEntry = {
-        hash: entry,
+        hash,
         ...indexData,
       }
 
       writeIndexHashTableEntry(indexDataBuffer, indexEntry)
     }
 
+    const dirDataSize = dirCount.size * indexDirectoryHashTableEntrySize
+    const dirDataBuffer = SmartBuffer.fromSize(dirDataSize)
+    const dirKeys = Array.from(dirCount.keys()).sort()
+
+    let pos = sqPackHeaderSize + sqPackIndexHeaderSize
+    for (const dirHash of dirKeys) {
+      const count = dirCount.get(dirHash)
+      if (!count) {
+        continue
+      }
+
+      const length = count * indexHashTableEntrySize
+      writeIndexDirectoryHashTableEntry(dirDataBuffer, {
+        dirHash,
+        offset: pos,
+        length,
+      })
+
+      pos += length
+    }
+
     await this.writeIndexFile(indexPath, {
       numberOfDataFile: this.dataHandles.size,
       indexData: indexDataBuffer.toBuffer(),
+      dirIndexData: dirDataBuffer.toBuffer(),
     })
   }
 
