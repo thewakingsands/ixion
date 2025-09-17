@@ -79,26 +79,6 @@ function validateHeadersCompatible(
 }
 
 /**
- * Merge languages from multiple headers
- */
-function mergeLanguages(headers: ExhHeader[]): number[] {
-  const allLanguages = new Set<number>()
-
-  for (const header of headers) {
-    for (const lang of header.languages) {
-      allLanguages.add(lang)
-    }
-  }
-
-  // Remove Language.None if there are other languages
-  if (allLanguages.size > 1 && allLanguages.has(Language.None)) {
-    allLanguages.delete(Language.None)
-  }
-
-  return Array.from(allLanguages).sort()
-}
-
-/**
  * Check if a sheet is multi-language
  */
 function isMultiLanguageSheet(languages: number[]): boolean {
@@ -162,23 +142,46 @@ export async function buildExdFiles({
 
       // Read headers from all servers
       const headers: ExhHeader[] = []
-      const headerData: Buffer[] = []
 
+      const languageMap = new Map<Language, SqPackReader>()
       for (const { reader, server, version } of readers) {
-        const data = await reader.readFile(exhPath)
-        if (!data) {
+        try {
+          const data = await reader.readFile(exhPath)
+          if (!data) {
+            throw new Error(
+              `Failed to read ${exhPath} from server ${server} (${version})`,
+            )
+          }
+
+          const header = readExhHeader(data)
+          headers.push(header)
+
+          // EXH may contain languages that are not present
+          const languages: Language[] = []
+          for (const language of header.languages) {
+            // Skip languages that are already in the map
+            if (languageMap.has(language)) {
+              continue
+            }
+
+            const hasLanguage = await reader.hasFile(
+              getExdPath(sheetName, header.paginations[0].startId, language),
+            )
+            if (hasLanguage) {
+              languageMap.set(language, reader)
+              languages.push(language)
+            }
+          }
+
+          debug(
+            `Read header from ${server}:${version} - languages: ${languages.map(formatLanguage).join(', ')}`,
+          )
+        } catch (e) {
           throw new Error(
             `Failed to read ${exhPath} from server ${server} (${version})`,
+            { cause: e },
           )
         }
-
-        const header = readExhHeader(data)
-        headers.push(header)
-        headerData.push(data)
-
-        debug(
-          `Read header from ${server}:${version} - languages: ${header.languages.map(formatLanguage).join(', ')}`,
-        )
       }
 
       // Validate headers are compatible
@@ -187,7 +190,7 @@ export async function buildExdFiles({
       }
 
       // Merge languages
-      const mergedLanguages = mergeLanguages(headers)
+      const mergedLanguages = Array.from(languageMap.keys()).sort()
       const isMultiLang = isMultiLanguageSheet(mergedLanguages)
 
       debug(
