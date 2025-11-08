@@ -1,11 +1,11 @@
 import { mkdirSync } from 'node:fs'
+import { compressDirectory, decompressToDirectory } from '@ffcafe/ixion-utils'
 import { Client } from 'minio'
 import {
   AbstractStorage,
   type StorageConfig,
   type VersionData,
 } from '../abstract.js'
-import { compressDirectory, decompressToDirectory } from '../utils/zip.js'
 
 export interface MinioStorageConfig {
   endPoint: string

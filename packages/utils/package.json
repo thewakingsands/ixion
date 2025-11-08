@@ -1,5 +1,5 @@
 {
-  "name": "@ffcafe/ixion-storage",
+  "name": "@ffcafe/ixion-utils",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,13 +20,15 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/yauzl": "^2.10.3",
+    "@types/yazl": "^3.3.0",
     "config": "workspace:*",
     "tsup": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@ffcafe/ixion-utils": "workspace:*",
-    "minio": "^8.0.5"
+    "yauzl": "^3.0.0",
+    "yazl": "^3.0.0"
   }
 }
