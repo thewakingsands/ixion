@@ -13,7 +13,15 @@ export interface UpdateOptions {
   storage?: string
 }
 
-export const updateCommand = async (options: UpdateOptions) => {
+export interface UpdateResult {
+  updated: boolean
+  beforeVersion: string
+  afterVersion: string
+}
+
+export const updateCommand = async (
+  options: UpdateOptions,
+): Promise<UpdateResult> => {
   try {
     console.log('🔍 Checking current version...')
 
@@ -59,7 +67,11 @@ export const updateCommand = async (options: UpdateOptions) => {
 
     if (allPatches.length === 0) {
       console.log('✅ No updates available')
-      return
+      return {
+        updated: false,
+        beforeVersion: currentVersion.ffxiv,
+        afterVersion: currentVersion.ffxiv,
+      }
     }
 
     // Separate FFXIV patches from expansion patches
@@ -84,7 +96,11 @@ export const updateCommand = async (options: UpdateOptions) => {
     if (ffxivPatches.length === 0) {
       console.log('✅ No FFXIV updates available')
       await currentVersion.update(latestExpansions)
-      return
+      return {
+        updated: false,
+        beforeVersion: currentVersion.ffxiv,
+        afterVersion: currentVersion.ffxiv,
+      }
     }
 
     if (options.dryRun) {
@@ -101,13 +117,18 @@ export const updateCommand = async (options: UpdateOptions) => {
           console.log(`  - ${expansion}: ${version}`)
         })
       }
-      return
+      return {
+        updated: false,
+        beforeVersion: currentVersion.ffxiv,
+        afterVersion: currentVersion.ffxiv,
+      }
     }
 
     console.log('\n📥 Starting FFXIV patch download and application...')
 
     // Track the current version
-    let version = currentVersion.ffxiv
+    const beforeVersion = currentVersion.ffxiv
+    let version = beforeVersion
 
     for (let i = 0; i < ffxivPatches.length; i++) {
       const patch = ffxivPatches[i]
@@ -145,6 +166,11 @@ export const updateCommand = async (options: UpdateOptions) => {
     })
 
     console.log('\n🎉 All FFXIV patches applied successfully!')
+    return {
+      updated: true,
+      beforeVersion,
+      afterVersion: version,
+    }
   } catch (error) {
     console.error('❌ Update failed:', error)
     process.exit(1)

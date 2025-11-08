@@ -1,5 +1,8 @@
 import { mkdirSync } from 'node:fs'
-import { compressDirectory, decompressToDirectory } from '@ffcafe/ixion-utils'
+import {
+  compressDirectoryToBuffer,
+  decompressToDirectory,
+} from '@ffcafe/ixion-utils'
 import { Client } from 'minio'
 import {
   AbstractStorage,
@@ -195,7 +198,7 @@ export class MinioStorage extends AbstractStorage {
   ): Promise<void> {
     try {
       // Compress the entire directory into a zip file
-      const zipBuffer = await compressDirectory(sourcePath)
+      const zipBuffer = await compressDirectoryToBuffer(sourcePath)
 
       // Upload the zip file
       const objectName = this.getObjectName(server, `${version}.zip`)

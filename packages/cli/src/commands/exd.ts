@@ -1,43 +1,13 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Command } from 'commander'
-import { buildExdFiles, type ServerVersion } from '../actions/exd-build'
+import {
+  buildExdFiles,
+  createExdFilter,
+  type ServerVersion,
+} from '../actions/exd-build'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
-
-/**
- * Create filter function
- */
-function createFilter(
-  keywords?: string[],
-  rootOnly?: boolean,
-): { filter: (sheet: string) => boolean; description: string } {
-  const filter = (sheet: string) => {
-    if (rootOnly && sheet.includes('/')) {
-      return false
-    }
-
-    if (keywords && keywords.length > 0) {
-      const lowerSheet = sheet.toLowerCase()
-      return keywords.some((keyword) =>
-        lowerSheet.includes(keyword.toLowerCase()),
-      )
-    }
-
-    return true
-  }
-
-  let description = ''
-  if (rootOnly && keywords && keywords.length > 0) {
-    description = ` (root-only + name: ${keywords.join(', ')})`
-  } else if (rootOnly) {
-    description = ' (root-only)'
-  } else if (keywords && keywords.length > 0) {
-    description = ` (name: ${keywords.join(', ')})`
-  }
-
-  return { filter, description }
-}
 
 export function registerExdCommand(program: Command) {
   const exdCmd = program
@@ -70,7 +40,7 @@ export function registerExdCommand(program: Command) {
           name?: string[]
         },
       ) => {
-        const { filter, description } = createFilter(
+        const { filter, description } = createExdFilter(
           options.name,
           options.rootOnly,
         )
@@ -120,7 +90,7 @@ export function registerExdCommand(program: Command) {
           name?: string[]
         },
       ) => {
-        const { filter, description } = createFilter(
+        const { filter, description } = createExdFilter(
           options.name,
           options.rootOnly,
         )
@@ -194,7 +164,7 @@ export function registerExdCommand(program: Command) {
           process.exit(1)
         }
 
-        const { filter, description } = createFilter(
+        const { filter, description } = createExdFilter(
           options.name,
           options.rootOnly,
         )

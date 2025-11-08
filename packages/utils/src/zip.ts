@@ -4,29 +4,64 @@ import * as yauzl from 'yauzl'
 import * as yazl from 'yazl'
 
 /**
+ * Internal function to handle writing compressed data to a writable stream.
+ * @param sourcePath - Path to the directory to compress
+ * @param onStreamReady - Callback to handle the yazl outputStream (Writable)
+ * @returns Promise that resolves when compression is complete
+ */
+async function compressDirectoryStream(
+  sourcePath: string,
+  onStreamReady: (
+    stream: NodeJS.ReadableStream,
+    zipfile: yazl.ZipFile,
+  ) => void | Promise<void>,
+): Promise<void> {
+  const zipfile = new yazl.ZipFile()
+  onStreamReady(zipfile.outputStream, zipfile)
+  await addDirectoryToZip(zipfile, sourcePath, '')
+  zipfile.end()
+}
+
+/**
  * Compress a directory to a zip file buffer
  * @param sourcePath - Path to the directory to compress
  * @returns Promise that resolves to the zip file buffer
  */
-export async function compressDirectory(sourcePath: string): Promise<Buffer> {
+export async function compressDirectoryToBuffer(
+  sourcePath: string,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const zipfile = new yazl.ZipFile()
     const chunks: Buffer[] = []
+    compressDirectoryStream(sourcePath, (stream) => {
+      stream.on('data', (chunk: Buffer) => {
+        chunks.push(chunk)
+      })
+      stream.on('end', () => {
+        resolve(Buffer.concat(chunks))
+      })
+      stream.on('error', reject)
+    }).catch(reject)
+  })
+}
 
-    zipfile.outputStream.on('data', (chunk: Buffer) => {
-      chunks.push(chunk)
-    })
-
-    zipfile.outputStream.on('end', () => {
-      resolve(Buffer.concat(chunks))
-    })
-
-    zipfile.outputStream.on('error', reject)
-
-    // Add all files from the source directory
-    addDirectoryToZip(zipfile, sourcePath, '')
-      .then(() => zipfile.end())
-      .catch(reject)
+/**
+ * Compress a directory to a zip file on disk
+ * @param sourcePath - Path to the directory to compress
+ * @param destPath - File path for the resulting zip file
+ * @returns Promise that resolves when the file is written
+ */
+export async function compressDirectoryToFile(
+  sourcePath: string,
+  destPath: string,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    compressDirectoryStream(sourcePath, (stream) => {
+      const writable = createWriteStream(destPath)
+      stream.pipe(writable)
+      stream.on('error', reject)
+      writable.on('error', reject)
+      writable.on('finish', resolve)
+    }).catch(reject)
   })
 }
 
