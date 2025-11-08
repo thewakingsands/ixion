@@ -36,6 +36,7 @@
     "@octokit/auth-action": "^6.0.2",
     "@octokit/rest": "^22.0.0",
     "commander": "^14.0.0",
-    "debug": "catalog:"
+    "debug": "catalog:",
+    "execa": "^9.6.0"
   }
 }
