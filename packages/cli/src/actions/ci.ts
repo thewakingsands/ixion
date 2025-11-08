@@ -9,6 +9,7 @@ import { basename, join } from 'node:path'
 import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
 import { createActionAuth } from '@octokit/auth-action'
 import { Octokit } from '@octokit/rest'
+import { $ } from 'execa'
 import { configExists } from '../utils/config'
 import { getTempDir, getWorkingDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
@@ -146,7 +147,7 @@ interface Archive extends ServerVersion {
  * Create GitHub release
  */
 async function createGitHubRelease(
-  title: string,
+  versions: Record<string, string>,
   archives: Archive[],
 ): Promise<void> {
   const octokit = new Octokit({
@@ -158,12 +159,22 @@ async function createGitHubRelease(
     throw new Error('GITHUB_REPOSITORY environment variable is required')
   }
 
+  // Write versions to file and commit
+  writeFileSync(ciVersionsPath, JSON.stringify(versions, null, 2), 'utf-8')
+  await $`git add ${ciVersionsPath}`
+  await $`git commit -m "ci: update released versions"`
+  await $`git push`
+
+  const hash = await $`git rev-parse HEAD`
+  const date = new Date().toISOString().replace(/[-:]/g, '').split('T')[0]
+  const name = `${date}_${hash.stdout.trim().slice(0, 7)}`
+
   // Create release
   const release = await octokit.repos.createRelease({
     owner,
     repo,
-    tag_name: title,
-    name: title,
+    tag_name: `publish/${name}`,
+    name,
     body: [
       '| Server | Version |',
       '| ------ | ------- |',
@@ -173,7 +184,7 @@ async function createGitHubRelease(
     prerelease: false,
   })
 
-  console.log(`✅ Created GitHub release: ${title}`)
+  console.log(`✅ Created GitHub release: ${name}`)
 
   // Upload assets
   for (const { path } of archives) {
@@ -279,8 +290,7 @@ export const ciCommand = async () => {
     // Create GitHub release or print file names
     if (isGitHubActions()) {
       console.log('\n🚀 Creating GitHub release...')
-      const today = new Date().toISOString().replace(/[-:]/g, '').split('T')[0]
-      await createGitHubRelease(today, archives)
+      await createGitHubRelease(currentVersions, archives)
     } else {
       console.log('\n📁 Archive files created:')
       for (const { path } of archives) {
