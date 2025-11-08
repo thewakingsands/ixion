@@ -30,5 +30,11 @@ jobs:
         run: pnpm build
 
       - name: Run CI command
+        env:
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
         run: pnpm x ci
 
