@@ -16,8 +16,8 @@ import { buildExdFiles, createExdFilter, type ServerVersion } from './exd-build'
 import { type UpdateOptions, updateCommand } from './update'
 
 const serversToCheck = ['sdo', 'squareEnix'] as const
-const mergedVersionServer = 'sdo'
-const mergedVersionName = 'merged'
+const mergedVersionReference = 'sdo'
+const mergedVersionServer = 'merged'
 
 const configTemplatePath = '.ixion-config.ci.json'
 const configPath = '.ixion-config.json'
@@ -95,6 +95,9 @@ async function createServerArchive(
   }
 }
 
+/**
+ * Create merged archive from EXD files of different servers
+ */
 async function createMergedArchive(
   version: string,
   serverVersions: ServerVersion[],
@@ -105,10 +108,12 @@ async function createMergedArchive(
 
   try {
     const { filter } = createExdFilter(undefined, true)
+    const outputDir = join(tempDir, 'sqpack/ffxiv')
+    mkdirSync(outputDir, { recursive: true })
 
     await buildExdFiles({
       serverVersions,
-      outputPrefix: tempDir,
+      outputPrefix: join(outputDir, '0a0000.win32'),
       filter,
     })
 
@@ -251,7 +256,7 @@ export const ciCommand = async () => {
     }))
     const mergedVersion = {
       server: mergedVersionServer,
-      version: currentVersions[mergedVersionServer] || '',
+      version: currentVersions[mergedVersionReference] || '',
     }
     const archives: Archive[] = [...serverVersions, mergedVersion].map(
       (archive) => ({
@@ -263,7 +268,7 @@ export const ciCommand = async () => {
     // Create archives for each server
     for (const { server, version, path } of archives) {
       if (server === mergedVersionServer) {
-        console.log(`📂 Creating merged archive for ${mergedVersion}`)
+        console.log(`📂 Creating merged archive for ${mergedVersionServer}`)
         await createMergedArchive(version, serverVersions, path)
       } else {
         console.log(`📂 Creating archive for ${server}: ${version}`)
