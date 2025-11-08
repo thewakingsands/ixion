@@ -38,14 +38,18 @@ export class SDOProvider extends AbstractPatchProvider {
       body: requestBody,
     })
 
-    if (res.status !== 200) {
-      throw new Error(
-        `Failed to request patch server: ${res.status}, ${await res.text()}`,
-      )
+    if (res.status === 204) {
+      return []
     }
 
-    const body = await res.text()
-    return parsePatchList(body, 'c38effbc')
+    if (res.status === 200) {
+      const body = await res.text()
+      return parsePatchList(body, 'c38effbc')
+    }
+
+    throw new Error(
+      `Failed to request patch server: ${res.status}, ${await res.text()}`,
+    )
   }
   async healthCheck(): Promise<boolean> {
     return true
