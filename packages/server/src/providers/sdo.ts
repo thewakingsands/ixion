@@ -3,7 +3,8 @@ import type { GameVersions, PatchEntry } from '../interface'
 import { parsePatchList } from '../utils/parser'
 import { AbstractPatchProvider } from './abstract'
 
-const server = 'ffxivpatch01.ff14.sdo.com'
+const defaultPatchServer = 'ffxivpatch01.ff14.sdo.com'
+const server = process.env.SDO_PATCH_SERVER || defaultPatchServer
 const debug = $debug('ixion:providers:sdo')
 
 /**
@@ -30,8 +31,9 @@ export class SDOProvider extends AbstractPatchProvider {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
+        Host: defaultPatchServer,
         'X-Hash-Check': 'enabled',
-        'User-Agent': 'FFXIV PATCH CLIENT',
+        'User-Agent': 'FFXIV_Patch',
       },
       body: requestBody,
     })
