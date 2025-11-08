@@ -31,6 +31,7 @@ jobs:
 
       - name: Run CI command
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
           MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
