@@ -37,7 +37,7 @@ function createConfigFromTemplate(): void {
   }
 
   const template = readFileSync(configTemplatePath, 'utf-8')
-  const config = template.replace(/\{\{(.*)\}\}/g, (_, p1) => {
+  const config = template.replace(/\{\{\s*(.*?)\s*\}\}/g, (_, p1) => {
     const value = process.env[p1]
     if (!value) {
       throw new Error(`Environment variable ${p1} not found`)
