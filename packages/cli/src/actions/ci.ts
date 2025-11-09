@@ -144,6 +144,14 @@ interface Archive extends ServerVersion {
   path: string
 }
 
+async function configGit(): Promise<void> {
+  const name = process.env.GITHUB_ACTOR ?? ''
+  const email = `${name}@users.noreply.github.com`
+
+  await $`git config user.name ${name}`
+  await $`git config user.email ${email}`
+}
+
 /**
  * Create GitHub release
  */
@@ -162,6 +170,8 @@ async function createGitHubRelease(
 
   // Write versions to file and commit
   writeFileSync(ciVersionsPath, JSON.stringify(versions, null, 2), 'utf-8')
+
+  await configGit()
   await $`git add ${ciVersionsPath}`
   await $`git commit -m ${ciVersionMessage}`
   await $`git push`
