@@ -85,9 +85,7 @@ async function createServerArchive(
 
     // write ffxivgame.ver to temp dir
     const verPath = join(tempDir, 'ffxivgame.ver')
-    if (existsSync(verPath)) {
-      writeFileSync(verPath, version, 'utf-8')
-    }
+    writeFileSync(verPath, version, 'utf-8')
 
     await compressDirectoryToFile(tempDir, outputPath)
   } finally {
@@ -121,9 +119,7 @@ async function createMergedArchive(
 
     // write ffxivgame.ver to temp dir
     const verPath = join(tempDir, 'ffxivgame.ver')
-    if (existsSync(verPath)) {
-      writeFileSync(verPath, version, 'utf-8')
-    }
+    writeFileSync(verPath, version, 'utf-8')
 
     await compressDirectoryToFile(tempDir, outputPath)
   } finally {
