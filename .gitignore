@@ -9,6 +9,6 @@ temp-*
 .ixion-config.json
 
 # Version files
-.ci
+.ci/archives
 outputs
 versions
