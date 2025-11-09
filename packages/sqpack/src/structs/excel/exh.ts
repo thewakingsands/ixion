@@ -7,17 +7,6 @@ export enum ExcelVariant {
   Subrows = 2,
 }
 
-export enum ExcelColumnType {
-  String = 0,
-  Int = 1,
-  Float = 2,
-}
-
-export interface ExcelColumn {
-  type: ExcelColumnType
-  offset: number
-}
-
 export enum ExcelColumnDataType {
   String = 0x0,
   Bool = 0x1,
@@ -44,6 +33,11 @@ export enum ExcelColumnDataType {
   PackedBool5 = 0x1e,
   PackedBool6 = 0x1f,
   PackedBool7 = 0x20,
+}
+
+export interface ExcelColumn {
+  type: ExcelColumnDataType
+  offset: number
 }
 
 export interface ExcelDataPagination {

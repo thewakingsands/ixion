@@ -81,3 +81,17 @@ export const writeExcelDataHeader = (
     buffer.writeUInt32BE(offset)
   }
 }
+
+export const excelDataRowHeaderSize = 6
+export interface ExcelDataRowHeader {
+  dataSize: number
+  rowCount: number
+}
+
+export const readExcelDataRowHeader = (
+  buffer: SmartBuffer,
+): ExcelDataRowHeader => {
+  const dataSize = buffer.readUInt32BE()
+  const rowCount = buffer.readUInt16BE()
+  return { dataSize, rowCount }
+}

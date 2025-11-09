@@ -1,6 +1,7 @@
 export { PlatformId } from './interface'
 export { SqPackReader } from './reader'
 export * from './structs/excel/exd'
+export * from './structs/excel/exd-reader'
 export * from './structs/excel/exh'
 export * from './structs/excel/exl'
 export { SqPackWriter } from './writer'

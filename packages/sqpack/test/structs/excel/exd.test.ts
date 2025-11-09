@@ -7,12 +7,13 @@ import {
   type ExcelDataHeader,
   getExdPath,
   readExcelDataHeader,
+  readExcelDataRowHeader,
   writeExcelDataHeader,
 } from '../../../src/structs/excel/exd'
 
 describe('Excel EXD Data Structs', () => {
   const fixtureBuffer = readFileSync(
-    join(__dirname, '../../__fixtures__/AchievementCategory.exd'),
+    join(__dirname, '../../__fixtures__/AchievementCategory_0.exd'),
   )
 
   let exdFile: ExcelDataHeader
@@ -36,6 +37,17 @@ describe('Excel EXD Data Structs', () => {
       expect(buffer.toBuffer()).toEqual(
         fixtureBuffer.subarray(0, buffer.length),
       )
+    })
+  })
+
+  describe('ExcelDataRowHeader', () => {
+    it('should read Excel data row header correctly', () => {
+      const buffer = SmartBuffer.fromBuffer(fixtureBuffer)
+
+      buffer.readOffset = exdFile.offsetMap.get(0) as number
+      const { dataSize, rowCount } = readExcelDataRowHeader(buffer)
+      expect(dataSize).toBe(10)
+      expect(rowCount).toBe(1)
     })
   })
 

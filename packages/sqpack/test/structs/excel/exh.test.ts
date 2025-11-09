@@ -4,7 +4,7 @@ import { Language } from '@ffcafe/ixion-utils'
 import { describe, expect, it } from 'vitest'
 import {
   type ExcelColumn,
-  ExcelColumnType,
+  ExcelColumnDataType,
   ExcelVariant,
   type ExhHeader,
   readExhHeader,
@@ -67,10 +67,10 @@ describe('Excel EXH Header Structs', () => {
         u4: 0x11223344,
         u5: 0x55667788,
         columns: [
-          { type: ExcelColumnType.String, offset: 0 },
-          { type: ExcelColumnType.Int, offset: 8 },
-          { type: ExcelColumnType.Float, offset: 12 },
-          { type: ExcelColumnType.String, offset: 16 },
+          { type: ExcelColumnDataType.String, offset: 0 },
+          { type: ExcelColumnDataType.Int32, offset: 8 },
+          { type: ExcelColumnDataType.Float32, offset: 12 },
+          { type: ExcelColumnDataType.String, offset: 16 },
         ],
         paginations: [
           { startId: 0, rowCount: 500 },
@@ -137,9 +137,9 @@ describe('Excel EXH Header Structs', () => {
 
     it('should handle all column types', () => {
       const columnTypes = [
-        ExcelColumnType.String,
-        ExcelColumnType.Int,
-        ExcelColumnType.Float,
+        ExcelColumnDataType.String,
+        ExcelColumnDataType.Int8,
+        ExcelColumnDataType.Float32,
       ]
       const columns: ExcelColumn[] = columnTypes.map((type, index) => ({
         type,
@@ -193,7 +193,7 @@ describe('Excel EXH Header Structs', () => {
           rowCount: 100,
           u4: 0,
           u5: 0,
-          columns: [{ type: ExcelColumnType.String, offset: 0 }],
+          columns: [{ type: ExcelColumnDataType.String, offset: 0 }],
           paginations: [{ startId: 0, rowCount: 100 }],
           languages: [Language.English],
         }
