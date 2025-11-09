@@ -55,7 +55,7 @@ importers:
         version: 1.13.6
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       tsx:
         specifier: 'catalog:'
         version: 4.20.6
@@ -109,13 +109,13 @@ importers:
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/exd:
     dependencies:
@@ -125,6 +125,12 @@ importers:
       debug:
         specifier: 'catalog:'
         version: 4.4.1
+      yaml:
+        specifier: ^2.8.1
+        version: 2.8.1
+      zod:
+        specifier: ^4.1.12
+        version: 4.1.12
     devDependencies:
       '@types/debug':
         specifier: 'catalog:'
@@ -134,13 +140,13 @@ importers:
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/server:
     dependencies:
@@ -159,13 +165,13 @@ importers:
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/sqpack:
     dependencies:
@@ -187,19 +193,19 @@ importers:
         version: 22.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6))
+        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1))
       config:
         specifier: workspace:*
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/storage:
     dependencies:
@@ -215,13 +221,13 @@ importers:
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/utils:
     dependencies:
@@ -243,13 +249,13 @@ importers:
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   packages/zipatch:
     dependencies:
@@ -268,19 +274,19 @@ importers:
         version: 22.18.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6))
+        version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1))
       config:
         specifier: workspace:*
         version: link:../../config
       tsup:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.2
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
 
 packages:
 
@@ -1694,6 +1700,11 @@ packages:
     resolution: {integrity: sha512-fDlsI/kFEx7gLvbecc0/ohLG50fugQp8ryHzMTuW9vSa1GJ0XYWKnhsUx7oie3G98+r56aTQIUB4kht42R3JvA==}
     engines: {node: '>=4.0'}
 
+  yaml@2.8.1:
+    resolution: {integrity: sha512-lcYcMxX2PO9XMGvAJkJ3OsNMw+/7FKes7/hgerGUYWIoWu5j/+YQqcZr5JnPZWzOsEBgMbSbiSTn/dv/69Mkpw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yauzl@3.2.0:
     resolution: {integrity: sha512-Ow9nuGZE+qp1u4JIPvg+uCiUr7xGQWdff7JQSk5VGYTAZMDe2q8lxJ10ygv10qmSj031Ty/6FNJpLO4o1Sgc+w==}
     engines: {node: '>=12'}
@@ -1704,6 +1715,9 @@ packages:
   yoctocolors@2.1.2:
     resolution: {integrity: sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==}
     engines: {node: '>=18'}
+
+  zod@4.1.12:
+    resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
 
 snapshots:
 
@@ -2034,7 +2048,7 @@ snapshots:
     dependencies:
       '@types/node': 22.19.0
 
-  '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6))':
+  '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 1.0.2
@@ -2049,7 +2063,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 2.0.0
-      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -2061,21 +2075,21 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.4(vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6))':
+  '@vitest/mocker@3.2.4(vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 3.2.4
       estree-walker: 3.0.3
       magic-string: 0.30.19
     optionalDependencies:
-      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
 
-  '@vitest/mocker@3.2.4(vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6))':
+  '@vitest/mocker@3.2.4(vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@vitest/spy': 3.2.4
       estree-walker: 3.0.3
       magic-string: 0.30.19
     optionalDependencies:
-      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
 
   '@vitest/pretty-format@3.2.4':
     dependencies:
@@ -2621,12 +2635,13 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  postcss-load-config@6.0.1(postcss@8.5.6)(tsx@4.20.6):
+  postcss-load-config@6.0.1(postcss@8.5.6)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       lilconfig: 3.1.3
     optionalDependencies:
       postcss: 8.5.6
       tsx: 4.20.6
+      yaml: 2.8.1
 
   postcss@8.5.6:
     dependencies:
@@ -2826,7 +2841,7 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  tsup@8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2):
+  tsup@8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1):
     dependencies:
       bundle-require: 5.1.0(esbuild@0.25.12)
       cac: 6.7.14
@@ -2837,7 +2852,7 @@ snapshots:
       fix-dts-default-cjs-exports: 1.0.1
       joycon: 3.1.1
       picocolors: 1.1.1
-      postcss-load-config: 6.0.1(postcss@8.5.6)(tsx@4.20.6)
+      postcss-load-config: 6.0.1(postcss@8.5.6)(tsx@4.20.6)(yaml@2.8.1)
       resolve-from: 5.0.0
       rollup: 4.50.1
       source-map: 0.8.0-beta.0
@@ -2881,13 +2896,13 @@ snapshots:
       is-typed-array: 1.1.15
       which-typed-array: 1.1.19
 
-  vite-node@3.2.4(@types/node@22.18.1)(tsx@4.20.6):
+  vite-node@3.2.4(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       cac: 6.7.14
       debug: 4.4.1
       es-module-lexer: 1.7.0
       pathe: 2.0.3
-      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -2902,13 +2917,13 @@ snapshots:
       - tsx
       - yaml
 
-  vite-node@3.2.4(@types/node@22.19.0)(tsx@4.20.6):
+  vite-node@3.2.4(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       cac: 6.7.14
       debug: 4.4.1
       es-module-lexer: 1.7.0
       pathe: 2.0.3
-      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -2923,7 +2938,7 @@ snapshots:
       - tsx
       - yaml
 
-  vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6):
+  vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.3)
@@ -2935,8 +2950,9 @@ snapshots:
       '@types/node': 22.18.1
       fsevents: 2.3.3
       tsx: 4.20.6
+      yaml: 2.8.1
 
-  vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6):
+  vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.3)
@@ -2948,12 +2964,13 @@ snapshots:
       '@types/node': 22.19.0
       fsevents: 2.3.3
       tsx: 4.20.6
+      yaml: 2.8.1
 
-  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6):
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6))
+      '@vitest/mocker': 3.2.4(vite@7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4
@@ -2971,8 +2988,8 @@ snapshots:
       tinyglobby: 0.2.15
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
-      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)
-      vite-node: 3.2.4(@types/node@22.18.1)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
+      vite-node: 3.2.4(@types/node@22.18.1)(tsx@4.20.6)(yaml@2.8.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/debug': 4.1.12
@@ -2991,11 +3008,11 @@ snapshots:
       - tsx
       - yaml
 
-  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6):
+  vitest@3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1):
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.4
-      '@vitest/mocker': 3.2.4(vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6))
+      '@vitest/mocker': 3.2.4(vite@7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/pretty-format': 3.2.4
       '@vitest/runner': 3.2.4
       '@vitest/snapshot': 3.2.4
@@ -3013,8 +3030,8 @@ snapshots:
       tinyglobby: 0.2.15
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
-      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)
-      vite-node: 3.2.4(@types/node@22.19.0)(tsx@4.20.6)
+      vite: 7.1.5(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
+      vite-node: 3.2.4(@types/node@22.19.0)(tsx@4.20.6)(yaml@2.8.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/debug': 4.1.12
@@ -3085,6 +3102,8 @@ snapshots:
 
   xmlbuilder@11.0.1: {}
 
+  yaml@2.8.1: {}
+
   yauzl@3.2.0:
     dependencies:
       buffer-crc32: 0.2.13
@@ -3095,3 +3114,5 @@ snapshots:
       buffer-crc32: 1.0.0
 
   yoctocolors@2.1.2: {}
+
+  zod@4.1.12: {}
