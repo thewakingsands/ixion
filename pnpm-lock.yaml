@@ -10,7 +10,7 @@ catalogs:
       specifier: 2.2.3
       version: 2.2.3
     '@types/debug':
-      specifier: ^4.1.12
+      specifier: 4.1.12
       version: 4.1.12
     '@types/node':
       specifier: ^22.19.0
@@ -19,7 +19,7 @@ catalogs:
       specifier: ^3.2.4
       version: 3.2.4
     debug:
-      specifier: ^4.4.1
+      specifier: 4.4.1
       version: 4.4.1
     smart-buffer:
       specifier: ^4.2.0
@@ -67,6 +67,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@ffcafe/ixion-exd':
+        specifier: workspace:*
+        version: link:../exd
       '@ffcafe/ixion-server':
         specifier: workspace:*
         version: link:../server
@@ -97,6 +100,31 @@ importers:
       execa:
         specifier: ^9.6.0
         version: 9.6.0
+    devDependencies:
+      '@types/debug':
+        specifier: 'catalog:'
+        version: 4.1.12
+      config:
+        specifier: workspace:*
+        version: link:../../config
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.0)(tsx@4.20.6)
+
+  packages/exd:
+    dependencies:
+      '@ffcafe/ixion-sqpack':
+        specifier: workspace:*
+        version: link:../sqpack
+      debug:
+        specifier: 'catalog:'
+        version: 4.4.1
     devDependencies:
       '@types/debug':
         specifier: 'catalog:'

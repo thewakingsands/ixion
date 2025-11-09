@@ -1,5 +1,5 @@
 {
-  "name": "@ffcafe/ixion-cli",
+  "name": "@ffcafe/ixion-exd",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,7 +16,6 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "start": "tsx src/index.ts",
     "lint": "biome check --write src",
     "test": "vitest"
   },
@@ -28,16 +27,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@ffcafe/ixion-exd": "workspace:*",
-    "@ffcafe/ixion-server": "workspace:*",
     "@ffcafe/ixion-sqpack": "workspace:*",
-    "@ffcafe/ixion-storage": "workspace:*",
-    "@ffcafe/ixion-utils": "workspace:*",
-    "@ffcafe/ixion-zipatch": "workspace:*",
-    "@octokit/auth-action": "^6.0.2",
-    "@octokit/rest": "^22.0.0",
-    "commander": "^14.0.0",
-    "debug": "catalog:",
-    "execa": "^9.6.0"
+    "debug": "catalog:"
   }
 }

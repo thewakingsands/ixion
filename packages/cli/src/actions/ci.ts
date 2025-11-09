@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, join } from 'node:path'
+import { createExdFilter } from '@ffcafe/ixion-exd'
 import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
 import { createActionAuth } from '@octokit/auth-action'
 import { Octokit } from '@octokit/rest'
@@ -14,7 +15,7 @@ import { $ } from 'execa'
 import { configExists } from '../utils/config'
 import { getTempDir, getWorkingDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
-import { buildExdFiles, createExdFilter, type ServerVersion } from './exd-build'
+import { buildExdFiles, type ServerVersion } from './exd-build'
 import { type UpdateOptions, updateCommand } from './update'
 
 const serversToCheck = ['sdo', 'squareEnix', 'actoz'] as const

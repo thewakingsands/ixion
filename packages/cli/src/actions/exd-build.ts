@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { rootExlFile, validateHeadersCompatible } from '@ffcafe/ixion-exd'
 import {
   type ExhHeader,
   getExdPath,
@@ -34,51 +35,6 @@ function formatLanguage(lang: Language): string {
 }
 
 /**
- * Validate that two EXH headers are compatible for merging
- */
-function validateHeadersCompatible(
-  header1: ExhHeader,
-  header2: ExhHeader,
-  sheetName: string,
-): boolean {
-  // Check column definitions
-  if (header1.columnCount !== header2.columnCount) {
-    throw new Error(
-      `Sheet ${sheetName}: Column count mismatch (${header1.columnCount} vs ${header2.columnCount})`,
-    )
-  }
-
-  for (let i = 0; i < header1.columnCount; i++) {
-    const col1 = header1.columns[i]
-    const col2 = header2.columns[i]
-    if (col1.type !== col2.type || col1.offset !== col2.offset) {
-      throw new Error(
-        `Sheet ${sheetName}: Column ${i} mismatch (type: ${col1.type} vs ${col2.type}, offset: ${col1.offset} vs ${col2.offset})`,
-      )
-    }
-  }
-
-  // Check paginations
-  if (header1.pageCount !== header2.pageCount) {
-    throw new Error(
-      `Sheet ${sheetName}: Page count mismatch (${header1.pageCount} vs ${header2.pageCount})`,
-    )
-  }
-
-  for (let i = 0; i < header1.pageCount; i++) {
-    const page1 = header1.paginations[i]
-    const page2 = header2.paginations[i]
-    if (page1.startId !== page2.startId) {
-      throw new Error(
-        `Sheet ${sheetName}: Page ${i} startId mismatch (${page1.startId} vs ${page2.startId})`,
-      )
-    }
-  }
-
-  return true
-}
-
-/**
  * Check if a sheet is multi-language
  */
 function isMultiLanguageSheet(languages: number[]): boolean {
@@ -86,40 +42,6 @@ function isMultiLanguageSheet(languages: number[]): boolean {
     languages.length > 1 ||
     (languages.length === 1 && languages[0] !== Language.None)
   )
-}
-
-/**
- * Create filter function
- */
-export function createExdFilter(
-  keywords?: string[],
-  rootOnly?: boolean,
-): { filter: (sheet: string) => boolean; description: string } {
-  const filter = (sheet: string) => {
-    if (rootOnly && sheet.includes('/')) {
-      return false
-    }
-
-    if (keywords && keywords.length > 0) {
-      const lowerSheet = sheet.toLowerCase()
-      return keywords.some((keyword) =>
-        lowerSheet.includes(keyword.toLowerCase()),
-      )
-    }
-
-    return true
-  }
-
-  let description = ''
-  if (rootOnly && keywords && keywords.length > 0) {
-    description = ` (root-only + name: ${keywords.join(', ')})`
-  } else if (rootOnly) {
-    description = ' (root-only)'
-  } else if (keywords && keywords.length > 0) {
-    description = ` (name: ${keywords.join(', ')})`
-  }
-
-  return { filter, description }
 }
 
 /**
@@ -150,9 +72,9 @@ export async function buildExdFiles({
 
     // Read root.exl from the first server
     const firstReader = readers[0].reader
-    const rootData = await firstReader.readFile('exd/root.exl')
+    const rootData = await firstReader.readFile(rootExlFile)
     if (!rootData) {
-      throw new Error('Failed to read root.exl from first server')
+      throw new Error(`Failed to read ${rootExlFile} from first server`)
     }
 
     const rootExl = readExlFile(rootData)
@@ -295,7 +217,7 @@ export async function buildExdFiles({
 
     const finalRootBuffer = writeExlFile(updatedRootExl)
 
-    await writer.addFile('exd/root.exl', finalRootBuffer)
+    await writer.addFile(rootExlFile, finalRootBuffer)
 
     // Close writer to finalize SqPack files
     await writer.close()

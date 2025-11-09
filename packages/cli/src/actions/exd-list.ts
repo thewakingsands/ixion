@@ -1,60 +1,10 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import {
-  getExdPath,
-  readExhHeader,
-  readExlFile,
-  SqPackReader,
-} from '@ffcafe/ixion-sqpack'
-import $debug from 'debug'
+import { readExdFileListFromReader } from '@ffcafe/ixion-exd'
+import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
-
-const debug = $debug('ixion:exd-list')
-
-const rootFile = 'exd/root.exl'
-
-export async function readExdFileListFromReader(
-  reader: SqPackReader,
-  filter?: (sheet: string) => boolean,
-) {
-  const root = await reader.readFile(rootFile)
-  if (!root) {
-    throw new Error('Failed to read root.exl')
-  }
-
-  const rootData = readExlFile(root)
-  const exdFiles: string[] = [rootFile]
-  for (const entry of rootData.entries) {
-    if (filter && !filter(entry.name)) {
-      continue
-    }
-
-    const exhFile = `exd/${entry.name}.exh`
-    exdFiles.push(exhFile)
-
-    const exh = await reader.readFile(exhFile)
-    if (!exh) {
-      throw new Error(`Failed to read ${exhFile}`)
-    }
-
-    const exhData = readExhHeader(exh)
-    debug('%d languages: %j', exhData.languageCount, exhData.languages)
-    for (const language of exhData.languages) {
-      for (const pagination of exhData.paginations) {
-        const path = getExdPath(entry.name, pagination.startId, language)
-        const valid = await reader.hasFile(path)
-        if (!valid) {
-          debug('%s not found', path)
-          continue
-        }
-        exdFiles.push(path)
-      }
-    }
-  }
-  return exdFiles
-}
 
 export async function readExdFileList(
   server: string,
