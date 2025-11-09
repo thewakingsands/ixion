@@ -83,7 +83,7 @@ export const readExhHeader = (rawBuffer: Buffer): ExhHeader => {
 
   const columns: ExcelColumn[] = []
   for (let i = 0; i < columnCount; i++) {
-    const type = buffer.readUInt16BE() as ExcelColumnType
+    const type = buffer.readUInt16BE() as ExcelColumnDataType
     const offset = buffer.readUInt16BE()
     columns.push({ type, offset })
   }
