@@ -178,7 +178,7 @@ async function createGitHubRelease(
 
   const hash = await $`git rev-parse HEAD`
   const date = new Date().toISOString().replace(/[-:]/g, '').split('T')[0]
-  const name = `${date}_${hash.stdout.trim().slice(0, 7)}`
+  const name = `${date}-${hash.stdout.trim().slice(0, 7)}`
 
   // Create release
   const release = await octokit.repos.createRelease({
@@ -189,7 +189,9 @@ async function createGitHubRelease(
     body: [
       '| Server | Version |',
       '| ------ | ------- |',
-      ...archives.map(({ server, version }) => `| ${server} | ${version} |`),
+      ...archives.map(
+        ({ server, version }) => `| ${kebabCase(server)} | ${version} |`,
+      ),
     ].join('\n'),
     draft: false,
     prerelease: false,
@@ -283,7 +285,10 @@ export const ciCommand = async () => {
     const archives: Archive[] = [...serverVersions, mergedVersion].map(
       (archive) => ({
         ...archive,
-        path: join(archiveDir, `${archive.server}-${archive.version}.zip`),
+        path: join(
+          archiveDir,
+          `${kebabCase(archive.server)}-${archive.version}.zip`,
+        ),
       }),
     )
 
@@ -314,4 +319,12 @@ export const ciCommand = async () => {
     console.error('❌ CI actions failed:', error)
     process.exit(1)
   }
+}
+
+function kebabCase(input: string) {
+  return input
+    .replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+    .replace(/^[-_]+/, '')
+    .replace(/[-_]+$/, '')
+    .replace(/[-_]+/g, '-')
 }
