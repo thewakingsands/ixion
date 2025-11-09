@@ -1,0 +1,4 @@
+[submodule "lib/EXDSchema"]
+	path = lib/EXDSchema
+	url = git@github.com:xivdev/EXDSchema.git
+	branch = latest
