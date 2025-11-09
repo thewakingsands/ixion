@@ -23,6 +23,7 @@ const mergedVersionServer = 'merged'
 const configTemplatePath = '.ixion-config.ci.json'
 const configPath = '.ixion-config.json'
 const ciVersionsPath = '.ci/versions.json'
+const ciVersionMessage = 'ci: update released versions'
 
 /**
  * Create config file from template with secrets
@@ -162,7 +163,7 @@ async function createGitHubRelease(
   // Write versions to file and commit
   writeFileSync(ciVersionsPath, JSON.stringify(versions, null, 2), 'utf-8')
   await $`git add ${ciVersionsPath}`
-  await $`git commit -m "ci: update released versions"`
+  await $`git commit -m ${ciVersionMessage}`
   await $`git push`
 
   const hash = await $`git rev-parse HEAD`
