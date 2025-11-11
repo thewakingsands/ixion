@@ -1,3 +1,4 @@
+import type { Language } from '@ffcafe/ixion-utils'
 import type { GameVersions, PatchEntry } from '../interface'
 
 /**
@@ -13,6 +14,11 @@ export abstract class AbstractPatchProvider {
    * Get the provider display name
    */
   abstract displayName: string
+
+  /**
+   * Get the languages supported by the provider
+   */
+  abstract languages: Language[]
 
   /**
    * Request patch list from the provider

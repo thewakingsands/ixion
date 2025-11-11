@@ -1,3 +1,4 @@
+import type { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
 import type { GameVersions, PatchEntry } from '../interface'
 import { AbstractPatchProvider } from './abstract'
@@ -65,7 +66,10 @@ export class ThaliakProvider extends AbstractPatchProvider {
   name = 'thaliak'
   displayName = 'Thaliak'
 
-  constructor(private repository: string) {
+  constructor(
+    private repository: string,
+    public languages: Language[],
+  ) {
     super()
   }
 

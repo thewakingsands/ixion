@@ -1,3 +1,4 @@
+import { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
 import type { GameVersions, PatchEntry } from '../interface'
 import { parsePatchList } from '../utils/parser'
@@ -13,6 +14,7 @@ const debug = $debug('ixion:providers:sdo')
 export class SDOProvider extends AbstractPatchProvider {
   name = 'sdo'
   displayName = 'SDO'
+  languages = [Language.ChineseSimplified]
 
   async request(versions: GameVersions): Promise<PatchEntry[]> {
     const versionReport = [versions.boot]
