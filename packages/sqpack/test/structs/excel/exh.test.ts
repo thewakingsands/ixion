@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { Language } from '@ffcafe/ixion-utils'
 import { describe, expect, it } from 'vitest'
-import { Language } from '../../../src/interface'
 import {
   type ExcelColumn,
   ExcelColumnType,

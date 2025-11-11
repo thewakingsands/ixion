@@ -28,15 +28,3 @@ export interface SqPackCategory {
   index2File?: string
   dataFiles: string[]
 }
-
-export enum Language {
-  None,
-  Japanese,
-  English,
-  German,
-  French,
-  ChineseSimplified,
-  ChineseTraditional,
-  Korean,
-  ChineseTraditional2,
-}

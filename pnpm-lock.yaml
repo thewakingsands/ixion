@@ -116,6 +116,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@ffcafe/ixion-utils':
+        specifier: workspace:*
+        version: link:../utils
       debug:
         specifier: 'catalog:'
         version: 4.4.1
@@ -138,6 +141,9 @@ importers:
 
   packages/sqpack:
     dependencies:
+      '@ffcafe/ixion-utils':
+        specifier: workspace:*
+        version: link:../utils
       debug:
         specifier: 'catalog:'
         version: 4.4.1

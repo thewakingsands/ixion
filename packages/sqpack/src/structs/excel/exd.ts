@@ -1,5 +1,5 @@
+import { Language } from '@ffcafe/ixion-utils'
 import type { SmartBuffer } from 'smart-buffer'
-import { Language } from '../../interface'
 
 const languageSuffix: Partial<Record<Language, string>> = {
   [Language.None]: '',

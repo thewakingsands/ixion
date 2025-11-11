@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { Language } from '@ffcafe/ixion-utils'
 import { SmartBuffer } from 'smart-buffer'
 import { describe, expect, it } from 'vitest'
-import { Language } from '../../../src/interface'
 import {
   type ExcelDataHeader,
   getExdPath,
