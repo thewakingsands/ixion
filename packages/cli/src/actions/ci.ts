@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -68,6 +69,30 @@ function readReleasedVersions(): Record<string, string> {
   }
 }
 
+function calculateHashForFile(path: string): string | undefined {
+  try {
+    const hash = createHash('sha1')
+    hash.update(readFileSync(path))
+    return hash.digest('hex').slice(0, 8)
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
+      return undefined
+    }
+
+    console.warn(`⚠️ Failed to calculate hash for ${path}:`, e)
+    return undefined
+  }
+}
+
+function calculateHashForArchive(
+  path: string,
+): Record<string, string | undefined> {
+  return {
+    exe: calculateHashForFile(join(path, 'ffxiv_dx11.exe')),
+    excel: calculateHashForFile(join(path, 'sqpack/ffxiv/0a0000.win32.dat0')),
+  }
+}
+
 /**
  * Create zip archive from version files
  */
@@ -75,7 +100,7 @@ async function createServerArchive(
   server: string,
   version: string,
   outputPath: string,
-): Promise<void> {
+) {
   const storageManager = getStorageManager()
   const tempDir = await getTempDir()
   console.log(`📂 Created temporary directory: ${tempDir}`)
@@ -88,6 +113,7 @@ async function createServerArchive(
     writeFileSync(verPath, version, 'utf-8')
 
     await compressDirectoryToFile(tempDir, outputPath)
+    return calculateHashForArchive(tempDir)
   } finally {
     // Clean up temporary directory
     console.log(`\n🧹 Cleaning up temporary directory: ${tempDir}`)
@@ -102,7 +128,7 @@ async function createMergedArchive(
   version: string,
   serverVersions: ServerVersion[],
   outputPath: string,
-): Promise<void> {
+) {
   const tempDir = await getTempDir()
   console.log(`📂 Created temporary directory: ${tempDir}`)
 
@@ -122,6 +148,7 @@ async function createMergedArchive(
     writeFileSync(verPath, version, 'utf-8')
 
     await compressDirectoryToFile(tempDir, outputPath)
+    return calculateHashForArchive(tempDir)
   } finally {
     // Clean up temporary directory
     console.log(`\n🧹 Cleaning up temporary directory: ${tempDir}`)
@@ -138,6 +165,7 @@ function isGitHubActions(): boolean {
 
 interface Archive extends ServerVersion {
   path: string
+  hash?: Record<string, string | undefined>
 }
 
 async function configGit(): Promise<void> {
@@ -183,10 +211,11 @@ async function createGitHubRelease(
     tag_name: `publish/${name}`,
     name,
     body: [
-      '| Server | Version |',
-      '| ------ | ------- |',
+      '| Server | Version | exeHash | 0aHash |',
+      '| ------ | ------- | ------- | ------ |',
       ...archives.map(
-        ({ server, version }) => `| ${kebabCase(server)} | ${version} |`,
+        ({ server, version, hash }) =>
+          `| ${kebabCase(server)} | ${version} | ${hash?.exe || '-'} | ${hash?.excel || '-'} |`,
       ),
     ].join('\n'),
     draft: false,
@@ -289,13 +318,14 @@ export const ciCommand = async () => {
     )
 
     // Create archives for each server
-    for (const { server, version, path } of archives) {
+    for (const item of archives) {
+      const { server, version, path } = item
       if (server === mergedVersionServer) {
         console.log(`📂 Creating merged archive for ${mergedVersionServer}`)
-        await createMergedArchive(version, serverVersions, path)
+        item.hash = await createMergedArchive(version, serverVersions, path)
       } else {
         console.log(`📂 Creating archive for ${server}: ${version}`)
-        await createServerArchive(server, version, path)
+        item.hash = await createServerArchive(server, version, path)
       }
     }
 
