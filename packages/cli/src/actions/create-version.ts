@@ -5,7 +5,9 @@ import { ZipatchReader } from '@ffcafe/ixion-zipatch'
 import { baseGameVersion, files } from '../config'
 import { readGameVersion } from '../utils/game'
 import { getTempDir } from '../utils/root'
+import { getServerLanguages } from '../utils/server'
 import { getStorageManager } from '../utils/storage'
+import { verifyExdFiles } from './exd-verify'
 
 /**
  * Create a new version from patches
@@ -80,7 +82,10 @@ export async function createVersionFromPatches(
       }
     }
 
-    // 4. Upload the patched version to storage
+    // 4. Verify contents of 0a0000.win32.dat0
+    await verifyExdFiles(workspaceDir, getServerLanguages(server))
+
+    // 5. Upload the patched version to storage
     console.log(`\n📤 Uploading patched version ${to} to storage...`)
     await storageManager.uploadVersion(server, to, workspaceDir)
     console.log(`✅ Successfully uploaded version ${to} to storage`)

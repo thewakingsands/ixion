@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import {
   type ExhHeader,
   getExdPath,
-  Language,
   readExhHeader,
   readExlFile,
   SqPackReader,
@@ -11,6 +10,7 @@ import {
   writeExhHeader,
   writeExlFile,
 } from '@ffcafe/ixion-sqpack'
+import { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
