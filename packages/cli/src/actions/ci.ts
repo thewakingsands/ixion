@@ -17,7 +17,7 @@ import { getStorageManager } from '../utils/storage'
 import { buildExdFiles, createExdFilter, type ServerVersion } from './exd-build'
 import { type UpdateOptions, updateCommand } from './update'
 
-const serversToCheck = ['sdo', 'squareEnix', 'actoz'] as const
+const serversToCheck = ['sdo', 'squareEnix'] as const
 const mergedVersionReference = 'sdo'
 const mergedVersionServer = 'merged'
 
