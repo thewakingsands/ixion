@@ -15,7 +15,8 @@ export const registerUpdateCommand = (program: Command) => {
       '--storage <name>',
       'Target specific storage (default: all storages)',
     )
-    .action(updateCommand)
-
+    .action(async (options) => {
+      await updateCommand(options)
+    })
   return updateCmd
 }
