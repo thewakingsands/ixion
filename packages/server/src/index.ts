@@ -1,5 +1,5 @@
 import { Language } from '@ffcafe/ixion-utils'
-import { SDOProvider } from './providers/sdo'
+import { ActozProvider, SDOProvider } from './providers/ffxiv-patch'
 import { ThaliakProvider } from './providers/thaliak'
 
 export { GameVersions, PatchEntry } from './interface'
@@ -13,5 +13,6 @@ export const servers = {
     Language.German,
     Language.Japanese,
   ]),
-  actoz: new ThaliakProvider('de199059', [Language.Korean]),
+  actoz: new ActozProvider(),
+  actozThaliak: new ThaliakProvider('de199059', [Language.Korean]),
 }
