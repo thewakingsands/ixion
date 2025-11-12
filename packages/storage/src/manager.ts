@@ -345,6 +345,15 @@ export class StorageManager {
       throw new Error(`Failed to sync versions: ${error}`)
     }
 
+    // sync version data
+    const currentVersion = await sourceStorage.readCurrentVersion(server)
+    if (currentVersion) {
+      console.log(
+        `📝 Syncing current version to ${target}: ${currentVersion.ffxiv} ...`,
+      )
+      await targetStorage.writeCurrentVersion(server, currentVersion)
+    }
+
     return { synced, skipped, errors }
   }
 
