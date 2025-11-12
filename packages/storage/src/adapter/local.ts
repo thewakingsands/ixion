@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { sortVersions, versionRegex } from '@ffcafe/ixion-utils'
 import {
   AbstractStorage,
   type StorageConfig,
@@ -75,12 +76,9 @@ export class LocalStorage extends AbstractStorage {
       }
 
       const entries = readdirSync(serverPath)
-      const versionDirs = entries
-        .map((entry) => entry.match(/(\d{4}\.\d{2}\.\d{2}\.\d{4}\.\d{4})/)?.[0])
-        .filter((entry) => entry !== undefined)
-        .sort()
+      const versionDirs = entries.filter((entry) => versionRegex.test(entry))
 
-      return versionDirs
+      return sortVersions(versionDirs)
     } catch (error) {
       console.warn('⚠️ Failed to list versions from local storage:', error)
       return []

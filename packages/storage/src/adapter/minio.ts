@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import {
   compressDirectoryToBuffer,
   decompressToDirectory,
+  sortVersions,
 } from '@ffcafe/ixion-utils'
 import { Client } from 'minio'
 import {
@@ -148,7 +149,7 @@ export class MinioStorage extends AbstractStorage {
 
           // Extract version from zip file name (e.g., "server/2025.07.28.0000.0000.zip" -> "2025.07.28.0000.0000")
           const match = relativeName.match(
-            /^[^/]+\/(\d{4}\.\d{2}\.\d{2}\.\d{4}\.\d{4})\.zip$/,
+            /^[^/]+\/(\w*\d{4}\.\d{2}\.\d{2}\.\d{4}\.\d{4}\w*)\.zip$/,
           )
           if (match) {
             versions.add(match[1])
@@ -156,7 +157,7 @@ export class MinioStorage extends AbstractStorage {
         }
       }
 
-      return Array.from(versions).sort()
+      return sortVersions(Array.from(versions))
     } catch (error) {
       console.warn('⚠️ Failed to list versions from MinIO storage:', error)
       return []
