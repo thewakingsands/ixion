@@ -1,7 +1,11 @@
-import { type Language, languageToCodeMap } from '@ffcafe/ixion-utils'
+import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
 import type { SmartBuffer } from 'smart-buffer'
 
 export function getExdPath(sheet: string, startId: number, language: Language) {
+  if (language === Language.None) {
+    return `exd/${sheet}_${startId}.exd`
+  }
+
   const code = languageToCodeMap[language]
   if (typeof code !== 'string') {
     throw new Error(`Invalid language: ${language}`)
