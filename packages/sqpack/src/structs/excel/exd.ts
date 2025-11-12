@@ -1,17 +1,9 @@
-import { Language } from '@ffcafe/ixion-utils'
+import { type Language, languageMap } from '@ffcafe/ixion-utils'
 import type { SmartBuffer } from 'smart-buffer'
 
-const languageSuffix: Partial<Record<Language, string>> = {
-  [Language.None]: '',
-  [Language.Japanese]: '_ja',
-  [Language.English]: '_en',
-  [Language.German]: '_de',
-  [Language.French]: '_fr',
-  [Language.ChineseSimplified]: '_chs',
-  [Language.ChineseTraditional]: '_cht',
-  [Language.Korean]: '_ko',
-  [Language.ChineseTraditional2]: '_cht',
-}
+const languageSuffix: Partial<Record<Language, string>> = Object.fromEntries(
+  Object.entries(languageMap).map(([key, value]) => [value, `_${key}`]),
+)
 
 export function getExdPath(sheet: string, startId: number, language: Language) {
   const suffix = languageSuffix[language]
