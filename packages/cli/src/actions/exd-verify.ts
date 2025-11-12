@@ -1,6 +1,5 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { servers } from '@ffcafe/ixion-server'
 import {
   getExdPath,
   readExhHeader,

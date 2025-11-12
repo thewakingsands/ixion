@@ -1,6 +1,5 @@
 import { SmartBuffer } from 'smart-buffer'
 import {
-  type ExcelDataHeader,
   excelDataRowHeaderSize,
   readExcelDataHeader,
   readExcelDataRowHeader,
