@@ -29,7 +29,7 @@ export async function verifyExdFilesFromReader(
   const missingFiles: string[] = []
   for (const entry of rootExl.entries) {
     const exhFile = `exd/${entry.name}.exh`
-    const exhData = await reader.readFile(exhFile)
+    const exhData = await reader.readFile(exhFile).catch(() => null)
     if (!exhData) {
       missingFiles.push(exhFile)
       continue

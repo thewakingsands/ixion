@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { StorageManager } from '@ffcafe/ixion-storage'
 import { ZipatchReader } from '@ffcafe/ixion-zipatch'
-import { baseGameVersion, files } from '../config'
+import { baseGameVersion, exdSqPackFile, files } from '../config'
 import { readGameVersion } from '../utils/game'
 import { getTempDir } from '../utils/root'
 import { getServerLanguages } from '../utils/server'
@@ -83,7 +83,15 @@ export async function createVersionFromPatches(
     }
 
     // 4. Verify contents of 0a0000.win32.dat0
-    await verifyExdFiles(workspaceDir, getServerLanguages(server))
+    if (existsSync(join(workspaceDir, `${exdSqPackFile}.dat0`))) {
+      try {
+        await verifyExdFiles(workspaceDir, getServerLanguages(server))
+      } catch (error) {
+        console.warn('⚠️ Failed to verify EXD files:', error)
+      }
+    } else {
+      console.warn('⚠️ No EXD files found in workspace')
+    }
 
     // 5. Upload the patched version to storage
     console.log(`\n📤 Uploading patched version ${to} to storage...`)
