@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import yaml from 'yaml'
 import { EXDSchema, NamedFieldSchema, UnnamedFieldSchema } from './interface'
 
+export * from './interface'
+
 /** Parse array fields in ArrayFieldSchema that are not verified by zod */
 export function parseArrayFields(
   data: unknown[],

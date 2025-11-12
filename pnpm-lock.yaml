@@ -122,6 +122,9 @@ importers:
       '@ffcafe/ixion-sqpack':
         specifier: workspace:*
         version: link:../sqpack
+      '@ffcafe/ixion-utils':
+        specifier: workspace:*
+        version: link:../utils
       debug:
         specifier: 'catalog:'
         version: 4.4.1

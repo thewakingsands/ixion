@@ -1,4 +1,10 @@
-import type { ExhHeader } from '@ffcafe/ixion-sqpack'
+import {
+  type ExhHeader,
+  readExhHeader,
+  readExlFile,
+  type SqPackReader,
+} from '@ffcafe/ixion-sqpack'
+import { rootExlFile } from './const'
 
 /**
  * Create filter function
@@ -77,4 +83,26 @@ export function validateHeadersCompatible(
   }
 
   return true
+}
+
+export async function listExdSheetsFromReader(reader: SqPackReader) {
+  const root = await reader.readFile(rootExlFile)
+  if (!root) {
+    throw new Error(`Failed to read ${rootExlFile}`)
+  }
+
+  const rootData = readExlFile(root)
+  return rootData.entries.map((entry) => entry.name)
+}
+
+export async function readExhHeaderFromReader(
+  reader: SqPackReader,
+  sheet: string,
+) {
+  const exhFile = `exd/${sheet}.exh`
+  const exhData = await reader.readFile(exhFile)
+  if (!exhData) {
+    throw new Error(`Failed to read ${exhFile}`)
+  }
+  return readExhHeader(exhData)
 }
