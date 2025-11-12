@@ -9,7 +9,7 @@ const languageSuffix: Partial<Record<Language, string>> = {
   [Language.French]: '_fr',
   [Language.ChineseSimplified]: '_chs',
   [Language.ChineseTraditional]: '_cht',
-  [Language.Korean]: '_kr',
+  [Language.Korean]: '_ko',
   [Language.ChineseTraditional2]: '_cht',
 }
 
