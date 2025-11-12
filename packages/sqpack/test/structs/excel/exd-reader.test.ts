@@ -23,6 +23,10 @@ describe('variant=1, Default', () => {
     expect(reader.readRow(1)).toEqual(['整体', 1, true, false, 1])
     expect(reader.readRow(8)).toEqual(['排名', 2, true, true, 2])
   })
+
+  it('should list row ids correctly', () => {
+    expect(reader.listRowIds()).toHaveLength(83)
+  })
 })
 
 describe('variant=2, Subrows', () => {
@@ -32,5 +36,15 @@ describe('variant=2, Subrows', () => {
     expect(reader.readSubrow(0, 0)).toEqual([0, 0, 0])
     expect(reader.readSubrow(1, 0)).toEqual([4512071, 0, 0])
     expect(reader.readSubrow(2, 19)).toEqual([4520515, 0, 0])
+  })
+
+  it('should list row ids correctly', () => {
+    expect(reader.listRowIds()).toHaveLength(31)
+  })
+
+  it('should get sub row count correctly', () => {
+    expect(reader.getSubRowCount(0)).toBe(1)
+    expect(reader.getSubRowCount(1)).toBe(45)
+    expect(reader.getSubRowCount(2)).toBe(45)
   })
 })

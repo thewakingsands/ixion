@@ -55,6 +55,15 @@ export class EXDReader {
     return this.readColumns(subrowOffset)
   }
 
+  listRowIds() {
+    return Array.from(this.offsetMap.keys())
+  }
+
+  getSubRowCount(rowId: number) {
+    const { rowCount } = this.readRowHeader(rowId)
+    return rowCount
+  }
+
   private readRowHeader(rowId: number) {
     const headerOffset = this.offsetMap.get(rowId)
     if (!headerOffset) {
