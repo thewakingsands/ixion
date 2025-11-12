@@ -1,17 +1,13 @@
-import { type Language, languageMap } from '@ffcafe/ixion-utils'
+import { type Language, languageToCodeMap } from '@ffcafe/ixion-utils'
 import type { SmartBuffer } from 'smart-buffer'
 
-const languageSuffix: Partial<Record<Language, string>> = Object.fromEntries(
-  Object.entries(languageMap).map(([key, value]) => [value, `_${key}`]),
-)
-
 export function getExdPath(sheet: string, startId: number, language: Language) {
-  const suffix = languageSuffix[language]
-  if (typeof suffix !== 'string') {
+  const code = languageToCodeMap[language]
+  if (typeof code !== 'string') {
     throw new Error(`Invalid language: ${language}`)
   }
 
-  return `exd/${sheet}_${startId}${suffix}.exd`
+  return `exd/${sheet}_${startId}_${code}.exd`
 }
 
 export interface ExcelDataHeader {

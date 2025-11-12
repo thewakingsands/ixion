@@ -19,3 +19,15 @@ export const languageMap = {
   cht: Language.ChineseTraditional,
   ko: Language.Korean,
 }
+
+export const languageToCodeMap: Record<Language, string> = {
+  [Language.None]: '',
+  [Language.Japanese]: 'ja',
+  [Language.English]: 'en',
+  [Language.German]: 'de',
+  [Language.French]: 'fr',
+  [Language.ChineseSimplified]: 'chs',
+  [Language.ChineseTraditional]: 'cht',
+  [Language.Korean]: 'ko',
+  [Language.ChineseTraditional2]: 'cht',
+}
