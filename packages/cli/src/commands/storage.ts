@@ -102,6 +102,7 @@ export const registerStorageCommand = (program: Command) => {
     .option('-s, --source <name>', 'Source storage name')
     .option('-t, --target <name>', 'Target storage name')
     .option('-a, --all', 'Sync all storages bidirectionally')
+    .option('--override', 'Override existing versions')
     .option('--server <name>', 'Server name for sync operations', 'default')
     .option('--from <version>', 'Sync versions from this version onwards')
     .option('--to <version>', 'Sync versions up to this version')
@@ -110,6 +111,7 @@ export const registerStorageCommand = (program: Command) => {
         source?: string
         target?: string
         all?: boolean
+        override?: boolean
         server: string
         from?: string
         to?: string
@@ -165,16 +167,17 @@ export const registerStorageCommand = (program: Command) => {
             console.log(
               `🔄 Syncing from '${options.source}' to '${options.target}' for server '${options.server}'...`,
             )
-            const result = await storageManager.syncVersions(
-              options.server,
-              options.source,
-              options.target,
+            const result = await storageManager.syncVersions({
+              server: options.server,
+              source: options.source,
+              target: options.target,
+              override: options.override,
               versionFilter,
-            )
+            })
 
             console.log('\n📊 Sync Summary:')
             console.log(`✅ Synced: ${result.synced.length}`)
-            console.log(`⏭️  Skipped: ${result.skipped.length}`)
+            console.log(`⏭️ Skipped: ${result.skipped.length}`)
             console.log(`❌ Errors: ${result.errors.length}`)
 
             if (result.synced.length > 0) {

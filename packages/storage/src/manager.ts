@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os'
 import type { AbstractStorage, StorageConfig, VersionData } from './abstract'
 import { LocalStorage } from './adapter/local'
 import { MinioStorage } from './adapter/minio'
@@ -261,21 +262,28 @@ export class StorageManager {
   /**
    * Sync versions from source storage to target storage
    */
-  async syncVersions(
-    server: string,
-    sourceStorageName: string,
-    targetStorageName: string,
-    versionFilter?: (version: string) => boolean,
-  ): Promise<{ synced: string[]; skipped: string[]; errors: string[] }> {
-    const sourceStorage = this.storages.get(sourceStorageName)
-    const targetStorage = this.storages.get(targetStorageName)
+  async syncVersions({
+    server,
+    source,
+    target,
+    override = false,
+    versionFilter,
+  }: {
+    server: string
+    source: string
+    target: string
+    override?: boolean
+    versionFilter?: (version: string) => boolean
+  }): Promise<{ synced: string[]; skipped: string[]; errors: string[] }> {
+    const sourceStorage = this.storages.get(source)
+    const targetStorage = this.storages.get(target)
 
     if (!sourceStorage) {
-      throw new Error(`Source storage '${sourceStorageName}' not found`)
+      throw new Error(`Source storage '${source}' not found`)
     }
 
     if (!targetStorage) {
-      throw new Error(`Target storage '${targetStorageName}' not found`)
+      throw new Error(`Target storage '${target}' not found`)
     }
 
     const synced: string[] = []
@@ -292,13 +300,15 @@ export class StorageManager {
         : sourceVersions
 
       console.log(
-        `📋 Found ${versionsToSync.length} versions to sync from ${sourceStorageName} to ${targetStorageName}`,
+        `📋 Found ${versionsToSync.length} versions to sync from ${source} to ${target}`,
       )
 
       for (const version of versionsToSync) {
         try {
           // Check if version already exists in target storage
-          const existsInTarget = await targetStorage.hasVersion(server, version)
+          const existsInTarget = override
+            ? false
+            : await targetStorage.hasVersion(server, version)
 
           if (existsInTarget) {
             console.log(`⏭️  Skipping ${version} (already exists in target)`)
@@ -309,7 +319,6 @@ export class StorageManager {
           console.log(`📥 Syncing ${version}...`)
 
           // Create a temporary directory for the version
-          const { tmpdir } = await import('node:os')
           const tempDir = `${tmpdir()}/ixion-sync-${version}-${Date.now()}`
 
           try {
@@ -361,19 +370,19 @@ export class StorageManager {
 
         try {
           console.log(`🔄 Syncing from ${sourceName} to ${targetName}...`)
-          results[syncKey] = await this.syncVersions(
+          results[syncKey] = await this.syncVersions({
             server,
-            sourceName,
-            targetName,
-          )
+            source: sourceName,
+            target: targetName,
+          })
 
           console.log(`🔄 Syncing from ${targetName} to ${sourceName}...`)
           const reverseKey = `${targetName}->${sourceName}`
-          results[reverseKey] = await this.syncVersions(
+          results[reverseKey] = await this.syncVersions({
             server,
-            targetName,
-            sourceName,
-          )
+            source: targetName,
+            target: sourceName,
+          })
         } catch (error) {
           console.error(
             `❌ Failed to sync between ${sourceName} and ${targetName}:`,
