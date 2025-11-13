@@ -31,6 +31,9 @@ export const Data = z.discriminatedUnion('type', [
 
 export const DefinitionSchema = z.object({
   sheet: z.string(),
-  defaultColumn: z.string(),
+  defaultColumn: z.string().optional(),
   definitions: z.array(Data),
 })
+
+export type Data = z.infer<typeof Data>
+export type DefinitionSchema = z.infer<typeof DefinitionSchema>

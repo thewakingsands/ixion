@@ -4,4 +4,4 @@
 	branch = latest
 [submodule "lib/SaintCoinach"]
 	path = lib/SaintCoinach
-	url = git@github.com:xivapi/SaintCoinach.git
+	url = git@github.com:thewakingsands/SaintCoinach.git
