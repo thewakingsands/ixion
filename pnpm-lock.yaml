@@ -66,7 +66,7 @@ importers:
   config: {}
 
   packages/cli:
-    dependencies:
+    devDependencies:
       '@ffcafe/ixion-exd':
         specifier: workspace:*
         version: link:../exd
@@ -91,22 +91,21 @@ importers:
       '@octokit/rest':
         specifier: ^22.0.0
         version: 22.0.1
+      '@types/debug':
+        specifier: 'catalog:'
+        version: 4.1.12
       commander:
         specifier: ^14.0.0
         version: 14.0.0
+      config:
+        specifier: workspace:*
+        version: link:../../config
       debug:
         specifier: 'catalog:'
         version: 4.4.1
       execa:
         specifier: ^9.6.0
         version: 9.6.0
-    devDependencies:
-      '@types/debug':
-        specifier: 'catalog:'
-        version: 4.1.12
-      config:
-        specifier: workspace:*
-        version: link:../../config
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.2)(yaml@2.8.1)

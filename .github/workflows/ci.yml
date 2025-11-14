@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  ci:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
       - name: Build project
         run: pnpm build
 
-      - name: Run CI command
+      - name: Run CI update command
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
@@ -37,5 +37,13 @@ jobs:
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
           MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
-        run: pnpm x ci
+        run: node packages/cli/dist/index.js ci update
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ixion-cli
+          path: |
+            packages/cli/dist/
+            lib/SaintCoinach/SaintCoinach/Definitions/*.json
+            lib/EXDSchema/*.yml

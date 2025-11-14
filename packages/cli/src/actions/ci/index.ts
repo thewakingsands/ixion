@@ -3,7 +3,7 @@ import { createConfigFromTemplate } from './init'
 import { createRelease } from './steps/release'
 import { checkAndUpdateVersions } from './steps/update'
 
-export const ciCommand = async () => {
+export const ciUpdateCommand = async () => {
   try {
     console.log('🔍 Running CI actions...')
 

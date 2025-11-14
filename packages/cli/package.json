@@ -21,13 +21,6 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@types/debug": "catalog:",
-    "config": "workspace:*",
-    "tsup": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
-  },
-  "dependencies": {
     "@ffcafe/ixion-exd": "workspace:*",
     "@ffcafe/ixion-server": "workspace:*",
     "@ffcafe/ixion-sqpack": "workspace:*",
@@ -36,8 +29,13 @@
     "@ffcafe/ixion-zipatch": "workspace:*",
     "@octokit/auth-action": "^6.0.2",
     "@octokit/rest": "^22.0.0",
+    "@types/debug": "catalog:",
     "commander": "^14.0.0",
+    "config": "workspace:*",
     "debug": "catalog:",
-    "execa": "^9.6.0"
+    "execa": "^9.6.0",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
