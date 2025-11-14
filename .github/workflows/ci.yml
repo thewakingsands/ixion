@@ -77,9 +77,11 @@ jobs:
         with:
           name: ixion-cli
 
-      - name: Fetch library
-        run: git clone --depth 1 https://github.com/thewakingsands/ffxiv-datamining-cn.git ffxiv-datamining-cn
-
+      - uses: actions/checkout@v5
+        with:
+          repository: thewakingsands/ffxiv-datamining-cn
+          ssh-key: ${{ secrets.SSH_KEY }}
+          
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -101,7 +103,6 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
-          branch-token: ${{ secrets.WORKER_ACCESS_KEY }}
           path: ffxiv-datamining-cn
           commit-message: "ver ${{ steps.export-csv.outputs.version }}"
           author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
