@@ -67,6 +67,9 @@ jobs:
 
   datamining:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     needs: build
     steps:
       - name: Download artifact
