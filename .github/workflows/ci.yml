@@ -59,6 +59,7 @@ jobs:
             packages/*/package.json
             lib/SaintCoinach/SaintCoinach/Definitions/*.json
             lib/EXDSchema/*.yml
+            package.json
 
   datamining:
     runs-on: ubuntu-latest

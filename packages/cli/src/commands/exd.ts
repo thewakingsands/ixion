@@ -403,10 +403,9 @@ export function registerExdCommand(program: Command) {
       ) => {
         try {
           // Get definition directory
-          const workingDir = getWorkingDir()
           const definitionDir =
             options.definitionDir ||
-            join(workingDir, 'lib/SaintCoinach/SaintCoinach/Definitions')
+            join(getWorkingDir(), 'lib/SaintCoinach/SaintCoinach/Definitions')
 
           const server = options.server
           if (!server) {
