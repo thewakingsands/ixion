@@ -47,7 +47,8 @@ jobs:
         with:
           name: ixion-cli
           path: |
-            packages/cli/dist/
+            node_modules/
+            packages/*/dist/
             lib/SaintCoinach/SaintCoinach/Definitions/*.json
             lib/EXDSchema/*.yml
 
