@@ -7,6 +7,7 @@ import type { Language } from '@ffcafe/ixion-utils'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
+import { isGitHubActions, writeGithubOutput } from './ci/github'
 
 export async function exportExdFilesToCSV({
   server,
@@ -34,6 +35,10 @@ export async function exportExdFilesToCSV({
     if (!localVersion) {
       throw new Error(`❌ No versions found for server ${server}`)
     }
+  }
+
+  if (isGitHubActions()) {
+    writeGithubOutput('version', localVersion)
   }
 
   // Download version to temporary directory

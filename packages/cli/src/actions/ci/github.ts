@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { createActionAuth } from '@octokit/auth-action'
 import { Octokit } from '@octokit/rest'
@@ -108,4 +108,12 @@ export async function createGitHubRelease(
 
     console.log(`✅ Uploaded ${archiveName} to release`)
   }
+}
+
+export function writeGithubOutput(key: string, value: string) {
+  const file = process.env.GITHUB_OUTPUT
+  if (!file) {
+    throw new Error('GITHUB_OUTPUT environment variable is required')
+  }
+  writeFileSync(file, `${key}=${value}\n`, { flag: 'a' })
 }
