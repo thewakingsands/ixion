@@ -61,6 +61,7 @@ jobs:
             packages/*/package.json
             lib/SaintCoinach/SaintCoinach/Definitions/*.json
             lib/EXDSchema/*.yml
+            .ixion-config.ci.json
             package.json
 
   datamining:
