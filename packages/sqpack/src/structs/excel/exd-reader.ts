@@ -41,17 +41,25 @@ export class EXDReader {
     return this.readColumns(offset)
   }
 
-  readSubrow(rowId: number, subRowId: number): any[] {
+  readSubrow(
+    rowId: number,
+    subRowIndex: number,
+  ): {
+    subRowId: number
+    columns: any[]
+  } {
     const { offset, rowCount } = this.readRowHeader(rowId)
-    if (subRowId >= rowCount) {
+    if (subRowIndex >= rowCount) {
       throw new Error(
-        `Subrow ${subRowId} out of range, expected 0-${rowCount - 1}`,
+        `Subrow ${subRowIndex} out of range, expected 0-${rowCount - 1}`,
       )
     }
 
-    const subrowOffset =
-      offset + (subRowId * this.dataOffset + subRowIdSize * (subRowId + 1))
-    return this.readColumns(subrowOffset)
+    const subRowOffset = offset + subRowIndex * (this.dataOffset + subRowIdSize)
+    return {
+      subRowId: this.readSubRowId(subRowOffset),
+      columns: this.readColumns(subRowOffset + subRowIdSize),
+    }
   }
 
   listRowIds() {
@@ -76,6 +84,11 @@ export class EXDReader {
       rowCount,
       dataSize,
     }
+  }
+
+  private readSubRowId(rowOffset: number): number {
+    this.buffer.readOffset = rowOffset
+    return this.buffer.readUInt16BE()
   }
 
   private readColumns(rowOffset: number): any[] {
@@ -128,10 +141,9 @@ export class EXDReader {
    * @param rowOffset - the offset of the first column of a row
    * @returns string
    */
-  private readString(rowOffset: number, columnValue: number): string {
+  private readString(rowOffset: number, columnValue: number): Buffer {
     this.buffer.readOffset = rowOffset + this.dataOffset + columnValue
-    const string = this.buffer.readStringNT()
-    return string
+    return this.buffer.readBufferNT()
   }
 
   /**
