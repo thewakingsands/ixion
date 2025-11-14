@@ -18,3 +18,5 @@ catalog:
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+
+nodeLinker: 'hoisted'
