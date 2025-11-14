@@ -252,8 +252,6 @@ export class CSVExporter {
     addBom = true,
   ) {
     const outputFile = join(dir, csvName(sheet, language))
-
-    console.log(`Writing ${outputFile}`)
     writeFileSync(
       outputFile,
       addBom ? Buffer.concat([bom, Buffer.from(csv)]) : csv,
