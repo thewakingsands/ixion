@@ -101,6 +101,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: ffxiv-datamining-cn
           commit-message: "ver ${{ steps.export-csv.outputs.version }}"
           branch: ci/ixion-${{ steps.export-csv.outputs.version }}
