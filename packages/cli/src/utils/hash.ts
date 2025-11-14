@@ -1,6 +1,35 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { open } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { PatchEntry } from '@ffcafe/ixion-server'
+
+export function calculateHashForFile(
+  path: string,
+  type: 'sha1' | 'sha256' = 'sha1',
+): string | undefined {
+  try {
+    const hash = createHash(type)
+    hash.update(readFileSync(path))
+    return hash.digest('hex').slice(0, 8)
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
+      return undefined
+    }
+
+    console.warn(`⚠️ Failed to calculate hash for ${path}:`, e)
+    return undefined
+  }
+}
+
+export function calculateHashForArchive(
+  path: string,
+): Record<string, string | undefined> {
+  return {
+    exe: calculateHashForFile(join(path, 'ffxiv_dx11.exe')),
+    excel: calculateHashForFile(join(path, 'sqpack/ffxiv/0a0000.win32.dat0')),
+  }
+}
 
 export const verifyPatchHash = async (
   filePath: string,

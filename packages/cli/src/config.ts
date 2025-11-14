@@ -5,6 +5,7 @@ export const files = [
   'sqpack/ffxiv/0a0000.win32.index2',
 ]
 
+export const defaultConfigPath = '.ixion-config.json'
 export const exdSqPackFile = 'sqpack/ffxiv/0a0000.win32'
 
 export const bootVersion =

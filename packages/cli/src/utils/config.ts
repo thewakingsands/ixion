@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import type { StorageConfig } from '@ffcafe/ixion-storage'
+import { defaultConfigPath } from '../config'
 
 export interface IxionConfig {
   storages: StorageConfig[]
@@ -11,8 +12,7 @@ export interface IxionConfig {
  * @returns Parsed configuration object
  */
 export function readConfig(configPath?: string): IxionConfig {
-  const defaultConfigPath = '.ixion-config.json'
-  const finalConfigPath = configPath || defaultConfigPath
+  const finalConfigPath = configPath || getDefaultConfigPath()
 
   if (!existsSync(finalConfigPath)) {
     throw new Error(
@@ -59,7 +59,7 @@ export function readConfig(configPath?: string): IxionConfig {
  * @returns Path to the default configuration file
  */
 export function getDefaultConfigPath(): string {
-  return '.ixion-config.json'
+  return defaultConfigPath
 }
 
 /**
