@@ -80,6 +80,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: thewakingsands/ffxiv-datamining-cn
+          path: ffxiv-datamining-cn
           ssh-key: ${{ secrets.SSH_KEY }}
           
       - name: Setup Node.js
