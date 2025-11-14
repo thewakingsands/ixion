@@ -14,6 +14,7 @@ import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 import { verifyExdFilesFromStorage } from '../actions/exd-verify'
 import { getWorkingDir } from '../utils/root'
+import { getServerLanguages } from '../utils/server'
 import { getStorageManager } from '../utils/storage'
 
 export function registerExdCommand(program: Command) {
@@ -200,7 +201,7 @@ export function registerExdCommand(program: Command) {
 
   exdCmd
     .command('verify')
-    .description('Verify EXD files in a workspace directory or from storage')
+    .description('Verify EXD files from storage')
     .option(
       '-s, --server <name...>',
       'Server name to verify (can be repeated, or use --all-servers)',
@@ -218,7 +219,6 @@ export function registerExdCommand(program: Command) {
     .option('--all-versions', 'Verify all versions for each server')
     .action(
       async (options: {
-        workspaceDir?: string
         server?: string[]
         allServers?: boolean
         storage?: string[]
@@ -391,7 +391,6 @@ export function registerExdCommand(program: Command) {
       async (
         outputDir: string,
         options: {
-          workspaceDir?: string
           server?: string
           version?: string
           definitionDir?: string
@@ -432,8 +431,7 @@ export function registerExdCommand(program: Command) {
           }
 
           if (languages.length === 0) {
-            console.error('❌ No languages specified')
-            process.exit(1)
+            languages.push(...getServerLanguages(server))
           }
 
           // Parse format
