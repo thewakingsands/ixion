@@ -13,8 +13,12 @@ describe('exdSheetToCSV', () => {
     reader = await SqPackReader.open({
       prefix: join(__dirname, '../../../outputs/7.35/0a0000.win32'),
     })
-    csvExporter = new CSVExporter()
-    await csvExporter.init()
+    csvExporter = new CSVExporter({
+      definitionDir: join(
+        __dirname,
+        '../../../lib/SaintCoinach/SaintCoinach/Definitions',
+      ),
+    })
   })
 
   it('should format AchievementHideCondition correctly', async () => {

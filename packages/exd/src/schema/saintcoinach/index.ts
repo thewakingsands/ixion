@@ -8,7 +8,10 @@ export async function loadSaintcoinachDefinition(dir: string, sheet: string) {
   try {
     const data = JSON.parse(await readFile(join(dir, fileName), 'utf-8'))
     return DefinitionSchema.parse(data)
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null
+    }
     throw new Error(`Failed to load ${fileName}`, { cause: error })
   }
 }
@@ -36,8 +39,11 @@ function extractLink(converter: any): string | undefined {
   }
 }
 
-export function generateFlatFields(definition: DefinitionSchema) {
+export function generateFlatFields(definition: DefinitionSchema | null) {
   const fields: FlatField[] = []
+  if (!definition) {
+    return fields
+  }
 
   let currentIndex = 0
   const processData = (data: Data, suffix: string = '') => {

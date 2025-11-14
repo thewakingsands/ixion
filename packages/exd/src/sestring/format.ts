@@ -1,0 +1,285 @@
+import {
+  type BinaryExpression,
+  BinaryExpressionComparison,
+  type Expression,
+  ExpressionType,
+  type ParameterExpression,
+  ParameterType,
+  type Payload,
+  type SeString,
+} from './interface'
+import { Type } from './type'
+
+export const readableByte = (byte: number): string => {
+  return byte.toString(16).padStart(2, '0')
+}
+export const readableBytes = (buffer: Buffer) => {
+  const result = []
+  for (let i = 0; i < buffer.length; i++) {
+    result.push(buffer[i].toString(16).padStart(2, '0'))
+  }
+  return result.join(' ')
+}
+
+export const formatHexValueTag = (tagName: string, tagData: Buffer) => {
+  return `<${tagName}>${tagData.toString('hex').toUpperCase()}</${tagName}>`
+}
+
+export const formatNormalTag = (tagName: string, expressions: Expression[]) => {
+  return `<${tagName}>${expressions.map((expression) => formatExpression(expression)).join('')}</${tagName}>`
+}
+
+export const formatSelfClosingTag = (
+  tagName: string,
+  expressions: Expression[],
+) => {
+  return `<${tagName}(${expressions.map((expression) => formatExpression(expression)).join(',')})/>`
+}
+
+export const formatBinaryExpression = ({
+  comparison,
+  left,
+  right,
+}: BinaryExpression): string => {
+  switch (comparison) {
+    case BinaryExpressionComparison.GreaterThanOrEqualTo:
+      return `GreaterThanOrEqualTo(${formatExpression(left)},${formatExpression(right)})`
+    case BinaryExpressionComparison.GreaterThan:
+      return `GreaterThan(${formatExpression(left)},${formatExpression(right)})`
+    case BinaryExpressionComparison.LessThanOrEqualTo:
+      return `LessThanOrEqualTo(${formatExpression(left)},${formatExpression(right)})`
+    case BinaryExpressionComparison.LessThan:
+      return `LessThan(${formatExpression(left)},${formatExpression(right)})`
+    case BinaryExpressionComparison.Equal:
+      return `Equal(${formatExpression(left)},${formatExpression(right)})`
+    case BinaryExpressionComparison.NotEqual:
+      return `NotEqual(${formatExpression(left)},${formatExpression(right)})`
+    default:
+      throw new Error(`Invalid binary expression comparison ${comparison}`)
+  }
+}
+
+export const formatParameterExpression = ({
+  kind,
+  value,
+}: ParameterExpression): string => {
+  switch (kind) {
+    case ParameterType.LocalNumber:
+      return `IntegerParameter(${value})`
+    case ParameterType.GlobalNumber:
+      return `PlayerParameter(${value})`
+    case ParameterType.LocalString:
+      return `StringParameter(${value})`
+    case ParameterType.GlobalString:
+      return `ObjectParameter(${value})`
+    default:
+      throw new Error(`Invalid parameter type ${kind}`)
+  }
+}
+
+export const formatExpression = (
+  expression: Expression,
+  debug = false,
+): string => {
+  switch (expression.type) {
+    case ExpressionType.Binary:
+      return formatBinaryExpression(expression)
+    case ExpressionType.Integer:
+      return debug
+        ? `Integer(${expression.value.toString()})`
+        : expression.value.toString()
+    case ExpressionType.String:
+      return debug
+        ? `String(${formatSeString(expression.value)})`
+        : formatSeString(expression.value)
+    case ExpressionType.Placeholder:
+      return `TopLevelParameter(${expression.value})`
+    case ExpressionType.Parameter:
+      return formatParameterExpression(expression)
+    default:
+      throw new Error(
+        `Invalid expression type ${(expression as Expression).type}`,
+      )
+  }
+}
+
+export const formatPayloadForError = (payload: Payload) => {
+  return [
+    'Expressions:',
+    ...payload.data.map((exp) => `  ${formatExpression(exp, true)}`),
+    'Bytecode trace:',
+    `${readableByte(payload.buffer[0])} - Start of tag`,
+    `  ${readableByte(payload.type)} - Type: ${Type[payload.type]}`,
+    `  ${readableBytes(payload.lengthExpression.buffer)} - Length: ${formatExpression(payload.lengthExpression, true)}`,
+    ...payload.data.map(
+      (exp) =>
+        `  ${readableBytes(exp.buffer)} - ${formatExpression(exp, true)}`,
+    ),
+    `${readableByte(payload.buffer[payload.buffer.length - 1])} - End of tag`,
+  ].join('\n')
+}
+
+export function formatSeString(seString: SeString): string {
+  const parts: string[] = []
+
+  for (const payload of seString) {
+    if (typeof payload === 'string') {
+      parts.push(payload)
+      continue
+    }
+
+    const payloadType = payload.type
+    const tagName = Type[payloadType] || `${payloadType}`
+    if (payload.data.length === 0) {
+      if (payloadType === Type.LineBreak) {
+        parts.push('\r\n')
+      } else {
+        parts.push(`<${tagName}/>`)
+      }
+
+      continue
+    }
+
+    try {
+      switch (payloadType) {
+        // SaintCoinach formats SeString as a string with hex values for certain tags
+        case Type.Fixed:
+        case Type.UIForeground:
+        case Type.UIGlow:
+        case Type.Unknown0A:
+        case Type.Unknown14:
+        case Type.Unknown2D:
+        case Type.Unknown60:
+          parts.push(
+            formatHexValueTag(
+              tagName,
+              payload.buffer.subarray(3, payload.length - 1),
+            ),
+          )
+          break
+        case Type.If: {
+          if (payload.data.length !== 3) {
+            throw new Error(
+              `If tag must have 3 expressions, got ${payload.data.length}`,
+            )
+          }
+          const [condition, trueValue, falseValue] = payload.data
+          parts.push(
+            `<${tagName}(${formatExpression(condition)})>${formatExpression(trueValue)}<Else/>${formatExpression(falseValue)}</${tagName}>`,
+          )
+          break
+        }
+        case Type.Switch:
+          if (payload.data.length < 2) {
+            throw new Error(
+              `Switch tag must have at least 2 expressions, got ${payload.data.length}`,
+            )
+          }
+
+          parts.push(`<${tagName}(${formatExpression(payload.data[0])})>`)
+          for (let i = 1; i < payload.data.length; i++) {
+            parts.push(
+              `<Case(${i})>${formatExpression(payload.data[i])}</Case>`,
+            )
+          }
+          parts.push(`</${tagName}>`)
+          break
+        case Type.Color: {
+          if (payload.data.length !== 1) {
+            throw new Error(
+              `Color tag must have 1 expression, got ${payload.data.length}`,
+            )
+          }
+
+          const expression = payload.data[0]
+          if (expression.type === ExpressionType.Placeholder) {
+            parts.push(`</${tagName}>`)
+          } else {
+            parts.push(`<${tagName}(${formatExpression(expression)})>`)
+          }
+          break
+        }
+        case Type.Value:
+        case Type.Highlight:
+        case Type.TwoDigitValue:
+          parts.push(formatNormalTag(tagName, payload.data))
+          break
+        case Type.CommandIcon:
+        case Type.Clickable:
+        case Type.Gui:
+        case Type.Time:
+        case Type.Sheet:
+        case Type.SheetDe:
+        case Type.SheetEn:
+        case Type.SheetFr:
+        case Type.SheetJa:
+        case Type.Split:
+          parts.push(formatSelfClosingTag(tagName, payload.data))
+          break
+        case Type.ZeroPaddedValue: {
+          if (payload.data.length !== 2) {
+            throw new Error(
+              `Format tag must have 2 expressions, got ${payload.data.length}`,
+            )
+          }
+
+          const [value, length] = payload.data
+          parts.push(
+            `<${tagName}(${formatExpression(length)})>${formatExpression(value)}</${tagName}>`,
+          )
+          break
+        }
+        case Type.Format: {
+          if (payload.data.length !== 2) {
+            throw new Error(
+              `Format tag must have 2 expressions, got ${payload.data.length}`,
+            )
+          }
+
+          const [arg, data] = payload.data
+          parts.push(
+            `<${tagName}(${formatExpression(arg)},${data.buffer.toString('hex').toUpperCase()})/>`,
+          )
+          break
+        }
+        case Type.Emphasis: {
+          if (payload.data.length !== 1) {
+            throw new Error(
+              `Emphasis tag must have 1 expression, got ${payload.data.length}`,
+            )
+          }
+
+          const expression = payload.data[0]
+          if (expression.type !== ExpressionType.Integer) {
+            throw new Error(
+              `Emphasis tag must have an integer expression, got ${expression.type}`,
+            )
+          }
+
+          const enabled = expression.value === 1
+          parts.push(enabled ? `<${tagName}>` : `</${tagName}>`)
+          break
+        }
+        default:
+          console.warn(`Unknown tag type ${payloadType} ${tagName}`)
+          parts.push(
+            formatHexValueTag(
+              tagName,
+              payload.buffer.subarray(3, payload.length - 1),
+            ),
+          )
+          break
+      }
+    } catch (error: unknown) {
+      throw new SeStringError('FormatError', payload, error)
+    }
+  }
+  return parts.join('')
+}
+
+export class SeStringError extends Error {
+  constructor(message: string, payload: Payload, cause: unknown) {
+    super(`${message}\n${formatPayloadForError(payload)}`, { cause })
+    this.name = 'SeStringError'
+  }
+}

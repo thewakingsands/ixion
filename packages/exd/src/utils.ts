@@ -6,13 +6,15 @@ import {
 } from '@ffcafe/ixion-sqpack'
 import { rootExlFile } from './const'
 
+export type ExdFilter = (sheet: string) => boolean
+
 /**
  * Create filter function
  */
 export function createExdFilter(
   keywords?: string[],
   rootOnly?: boolean,
-): { filter: (sheet: string) => boolean; description: string } {
+): { filter: ExdFilter; description: string } {
   const filter = (sheet: string) => {
     if (rootOnly && sheet.includes('/')) {
       return false

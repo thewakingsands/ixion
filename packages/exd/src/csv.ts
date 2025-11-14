@@ -9,8 +9,17 @@ import {
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
 import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
-import { loadEXDSchema, type NamedFieldSchema } from './schema'
-import { listExdSheetsFromReader, readExhHeaderFromReader } from './utils'
+import {
+  generateFlatFields,
+  loadSaintcoinachDefinition,
+} from './schema/saintcoinach'
+import { getSaintcoinachType } from './schema/utils'
+import { formatSeString, parseSeString } from './sestring'
+import {
+  type ExdFilter,
+  listExdSheetsFromReader,
+  readExhHeaderFromReader,
+} from './utils'
 
 export enum ExdCSVFormat {
   /**
@@ -40,70 +49,68 @@ const csvName = (sheet: string, language?: Language) => {
   return `${sheet}.csv`
 }
 
-const typeMap: Record<ExcelColumnDataType, string> = {
-  [ExcelColumnDataType.String]: 'str',
-  [ExcelColumnDataType.Bool]: 'bool',
-  [ExcelColumnDataType.Int8]: 'sbyte',
-  [ExcelColumnDataType.UInt8]: 'byte',
-  [ExcelColumnDataType.Int16]: 'int16',
-  [ExcelColumnDataType.UInt16]: 'uint16',
-  [ExcelColumnDataType.Int32]: 'int32',
-  [ExcelColumnDataType.UInt32]: 'uint32',
-  [ExcelColumnDataType.Unk]: 'unk',
-  [ExcelColumnDataType.Int64]: 'int64',
-  [ExcelColumnDataType.UInt64]: 'uint64',
-  [ExcelColumnDataType.Unk2]: 'unk',
-  [ExcelColumnDataType.Float32]: 'single',
-  [ExcelColumnDataType.PackedBool0]: 'bit&01',
-  [ExcelColumnDataType.PackedBool1]: 'bit&02',
-  [ExcelColumnDataType.PackedBool2]: 'bit&04',
-  [ExcelColumnDataType.PackedBool3]: 'bit&08',
-  [ExcelColumnDataType.PackedBool4]: 'bit&10',
-  [ExcelColumnDataType.PackedBool5]: 'bit&20',
-  [ExcelColumnDataType.PackedBool6]: 'bit&40',
-  [ExcelColumnDataType.PackedBool7]: 'bit&80',
+interface CSVExporterOptions {
+  definitionDir: string
+  crlf?: boolean
 }
 
-interface FormattedColumn {
-  index: number
-  name: string
-  type: ExcelColumnDataType
-  typeString: string
-}
-
+const bom = Buffer.from([0xef, 0xbb, 0xbf])
 export class CSVExporter {
-  private schemas: Record<string, NamedFieldSchema[]> = {}
+  constructor(private readonly options: CSVExporterOptions) {}
 
-  async init() {
-    this.schemas = await loadEXDSchema(
-      join(__dirname, '../../../lib/EXDSchema'),
+  async formatHeader(sheet: string, columns: ExcelColumn[]): Promise<string[]> {
+    const definition = await loadSaintcoinachDefinition(
+      this.options.definitionDir,
+      sheet,
     )
+
+    const fields = generateFlatFields(definition)
+
+    return [
+      `key,${columns.map((_, index) => index).join(',')}`,
+      `#,${columns.map((_, i) => fields[i]?.name || '').join(',')}`,
+      `int32,${columns.map(({ type }, index) => fields[index]?.link || getSaintcoinachType(type)).join(',')}`,
+    ]
   }
 
-  formatColumns(sheet: string, columns: ExcelColumn[]): FormattedColumn[] {
-    const schema = this.schemas[sheet]
-    return columns.map(({ type }, index) => {
-      const result = { index, name: '', type, typeString: typeMap[type] }
-      if (schema) {
-        const field = schema[index]
-        if (field) {
-          result.name = field.name
-        }
-      }
-
-      return result
-    })
-  }
-
-  formatData(
-    id: string | number,
-    columns: FormattedColumn[],
-    data: any[],
-  ): string {
-    return `${id},${columns.map((column, i) => {
-      const value = data[i]
+  formatData(id: string | number, data: any[]): string {
+    return `${id},${data.map((value) => {
       if (typeof value === 'boolean') {
         return value ? 'True' : 'False'
+      }
+
+      if (typeof value === 'string') {
+        return `"${value.replace(/"/g, '""')}"`
+      }
+
+      if (typeof value === 'number') {
+        if (value % 1 === 0) {
+          return value.toString()
+        }
+
+        return (+value.toPrecision(6)).toString().replace('e', 'E')
+      }
+
+      if (typeof value === 'bigint') {
+        // convert to 4 int16
+        const array: number[] = []
+        for (let i = 0; i < 4; i++) {
+          const val = Number(value & 0xffffn)
+          array.push(val >= 0x8000 ? val - 0x10000 : val)
+          value >>= 16n
+        }
+        return `"${array.join(', ')}"`
+      }
+
+      if (Buffer.isBuffer(value)) {
+        try {
+          const seString = parseSeString(value)
+          return `"${formatSeString(seString).replace(/"/g, '""')}"`
+        } catch (error) {
+          const hex = value.toString('hex')
+          console.warn('Failed parsing hex', hex, 'as SeString:', error)
+          return `__HEX__${hex}`
+        }
       }
 
       return value
@@ -114,6 +121,7 @@ export class CSVExporter {
     readers: Array<{ languages: Language[]; reader: SqPackReader }>,
     format: ExdCSVFormat,
     outputDir: string,
+    filter?: ExdFilter,
   ) {
     if (readers.length === 0) {
       throw new Error('No readers provided')
@@ -136,6 +144,10 @@ export class CSVExporter {
     } = readers[0]
     const sheets = await listExdSheetsFromReader(primaryReader)
     for (const sheet of sheets) {
+      if (filter && !filter(sheet)) {
+        continue
+      }
+
       const primaryExh = await readExhHeaderFromReader(primaryReader, sheet)
       const isNoneLanguage =
         primaryExh.languages.length === 1 &&
@@ -146,7 +158,15 @@ export class CSVExporter {
           (column) => column.type === ExcelColumnDataType.String,
         )
 
-      if (hasStrings) {
+      if (!hasStrings || format === ExdCSVFormat.Single) {
+        const csv = await this.exportSheet(
+          primaryReader,
+          sheet,
+          primaryExh,
+          isNoneLanguage ? Language.None : primaryLanguage,
+        )
+        this.writeFile(outputDir, sheet, Language.None, csv)
+      } else {
         if (format === ExdCSVFormat.Multiple) {
           for (let i = 0; i < readers.length; i++) {
             const { reader, languages } = readers[i]
@@ -155,23 +175,13 @@ export class CSVExporter {
                 ? primaryExh
                 : await readExhHeaderFromReader(reader, sheet)
             for (const language of languages) {
-              const outputFile = join(outputDir, csvName(sheet, language))
               const csv = await this.exportSheet(reader, sheet, exh, language)
-              writeFileSync(outputFile, csv)
+              this.writeFile(outputDir, sheet, language, csv)
             }
           }
         }
 
         // Merged format is not implemented yet
-      } else {
-        const outputFile = join(outputDir, csvName(sheet))
-        const csv = await this.exportSheet(
-          primaryReader,
-          sheet,
-          primaryExh,
-          isNoneLanguage ? Language.None : primaryLanguage,
-        )
-        writeFileSync(outputFile, csv)
       }
     }
   }
@@ -188,12 +198,8 @@ export class CSVExporter {
       )
     }
 
-    const columns = this.formatColumns(sheet, exdHeader.columns)
-    const lines: string[] = [
-      `key,${columns.map(({ index }) => index).join(',')}`,
-      `#,${columns.map(({ name }) => name).join(',')}`,
-      `int32,${columns.map(({ typeString }) => typeString).join(',')}`,
-    ]
+    const header = await this.formatHeader(sheet, exdHeader.columns)
+    const lines: string[] = [...header]
 
     for (const pagination of exdHeader.paginations) {
       const exdFile = getExdPath(sheet, pagination.startId, language)
@@ -205,20 +211,52 @@ export class CSVExporter {
       for (const rowId of exdReader.listRowIds()) {
         if (exdReader.isSubrows) {
           for (
-            let subRowId = 0;
-            subRowId < exdReader.getSubRowCount(rowId);
-            subRowId++
+            let index = 0;
+            index < exdReader.getSubRowCount(rowId);
+            index++
           ) {
-            const row = exdReader.readSubrow(rowId, subRowId)
-            lines.push(this.formatData(`${rowId}.${subRowId}`, columns, row))
+            const { subRowId, columns } = exdReader.readSubrow(rowId, index)
+            try {
+              lines.push(this.formatData(`${rowId}.${subRowId}`, columns))
+            } catch (error) {
+              console.warn('Columns:', header)
+              throw new Error(
+                `Failed formatting ${sheet}#${rowId}.${subRowId}`,
+                { cause: error },
+              )
+            }
           }
         } else {
           const row = exdReader.readRow(rowId)
-          lines.push(this.formatData(rowId, columns, row))
+          try {
+            lines.push(this.formatData(rowId, row))
+          } catch (error) {
+            console.warn('Columns:', header)
+            throw new Error(`Failed formatting ${sheet}#${rowId}`, {
+              cause: error,
+            })
+          }
         }
       }
     }
 
-    return lines.join('\n') + '\n'
+    const separator = this.options.crlf ? '\r\n' : '\n'
+    return `${lines.join(separator)}${separator}`
+  }
+
+  writeFile(
+    dir: string,
+    sheet: string,
+    language: Language,
+    csv: string,
+    addBom = true,
+  ) {
+    const outputFile = join(dir, csvName(sheet, language))
+
+    console.log(`Writing ${outputFile}`)
+    writeFileSync(
+      outputFile,
+      addBom ? Buffer.concat([bom, Buffer.from(csv)]) : csv,
+    )
   }
 }
