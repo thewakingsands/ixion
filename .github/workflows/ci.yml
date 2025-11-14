@@ -46,7 +46,9 @@ jobs:
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
           MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
-        run: node packages/cli/dist/index.js ci update
+        run: |
+          node packages/cli/dist/index.js ci init
+          node packages/cli/dist/index.js ci update
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -80,7 +82,16 @@ jobs:
 
       - name: Run datamining command
         id: export-csv
-        run: node packages/cli/dist/index.js exd export-csv ffxiv-datamining-cn -s sdo --crlf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+        run: |
+          node packages/cli/dist/index.js ci init
+          node packages/cli/dist/index.js exd export-csv ffxiv-datamining-cn -s sdo --crlf
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7

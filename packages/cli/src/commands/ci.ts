@@ -1,8 +1,13 @@
 import type { Command } from 'commander'
-import { ciUpdateCommand } from '../actions/ci'
+import { ciInitCommand, ciUpdateCommand } from '../actions/ci'
 
 export const registerCiCommand = (program: Command) => {
   const ciCmd = program.command('ci').description('Run CI actions')
+
+  ciCmd
+    .command('init')
+    .description('Initialize CI configuration')
+    .action(ciInitCommand)
 
   ciCmd
     .command('update')
