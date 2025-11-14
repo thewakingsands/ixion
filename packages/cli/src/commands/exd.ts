@@ -1,12 +1,19 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createExdFilter } from '@ffcafe/ixion-exd'
+import { createExdFilter, ExdCSVFormat } from '@ffcafe/ixion-exd'
 import { servers } from '@ffcafe/ixion-server'
+import {
+  type Language,
+  languageMap,
+  languageToCodeMap,
+} from '@ffcafe/ixion-utils'
 import type { Command } from 'commander'
 import { buildExdFiles, type ServerVersion } from '../actions/exd-build'
+import { exportExdFilesToCSV } from '../actions/exd-csv-export'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 import { verifyExdFilesFromStorage } from '../actions/exd-verify'
+import { getWorkingDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
 
 export function registerExdCommand(program: Command) {
@@ -347,6 +354,121 @@ export function registerExdCommand(program: Command) {
           }
         } catch (error) {
           console.error('❌ Verification failed:', error)
+          process.exit(1)
+        }
+      },
+    )
+
+  exdCmd
+    .command('export-csv')
+    .description('Export EXD files to CSV format')
+    .argument('<output-dir>', 'Output directory for CSV files')
+    .option('-s, --server <name>', 'Server name for storage operations')
+    .option('-v, --version <version>', 'Version to export from')
+    .option(
+      '--definition-dir <dir>',
+      'Directory containing SaintCoinach definitions',
+    )
+    .option(
+      '-l, --language <lang...>',
+      'Languages to export (e.g., ja, en, chs)',
+    )
+    .option(
+      '-f, --format <format>',
+      'CSV format: single, multiple, or merged',
+      'single',
+    )
+    .option('--crlf', 'Use CRLF line endings instead of LF', false)
+    .option(
+      '--root-only',
+      'Only export files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
+    .action(
+      async (
+        outputDir: string,
+        options: {
+          workspaceDir?: string
+          server?: string
+          version?: string
+          definitionDir?: string
+          language?: string[]
+          format?: string
+          crlf?: boolean
+          rootOnly?: boolean
+          name?: string[]
+        },
+      ) => {
+        try {
+          // Get definition directory
+          const workingDir = getWorkingDir()
+          const definitionDir =
+            options.definitionDir ||
+            join(workingDir, 'lib/SaintCoinach/SaintCoinach/Definitions')
+
+          const server = options.server
+          if (!server) {
+            console.error('❌ --server is required')
+            process.exit(1)
+          }
+
+          // Parse languages
+          const languages: Language[] = []
+          if (options.language && options.language.length > 0) {
+            for (const lang of options.language) {
+              if (lang in languageMap) {
+                languages.push(languageMap[lang as keyof typeof languageMap])
+              } else {
+                console.error(`❌ Unknown language: ${lang}`)
+                console.log(
+                  `Available languages: ${Object.keys(languageMap).join(', ')}`,
+                )
+                process.exit(1)
+              }
+            }
+          }
+
+          if (languages.length === 0) {
+            console.error('❌ No languages specified')
+            process.exit(1)
+          }
+
+          // Parse format
+          const formatMap: Record<string, ExdCSVFormat> = {
+            single: ExdCSVFormat.Single,
+            multiple: ExdCSVFormat.Multiple,
+            merged: ExdCSVFormat.Merged,
+          }
+          const format =
+            formatMap[options.format?.toLowerCase() || 'single'] ||
+            ExdCSVFormat.Single
+
+          // Create filter
+          const { filter, description } = createExdFilter(
+            options.name,
+            options.rootOnly,
+          )
+
+          console.log(`📊 Exporting EXD files${description}...`)
+          console.log(`  Format: ${options.format || 'single'}`)
+          console.log(
+            `  Languages: ${languages.map((l) => languageToCodeMap[l]).join(', ')}`,
+          )
+          await exportExdFilesToCSV({
+            server,
+            version: options.version,
+            outputDir,
+            languages,
+            format,
+            definitionDir,
+            crlf: options.crlf || false,
+            filter,
+          })
+        } catch (error) {
+          console.error('❌ CSV export failed:', error)
           process.exit(1)
         }
       },
