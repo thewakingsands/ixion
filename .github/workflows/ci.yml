@@ -101,7 +101,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.MINIO_ACCESS_KEY }}
           path: ffxiv-datamining-cn
           commit-message: "ver ${{ steps.export-csv.outputs.version }}"
           branch: ci/ixion-${{ steps.export-csv.outputs.version }}
