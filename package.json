@@ -6,7 +6,7 @@
     "dev": "pnpm -r --parallel dev",
     "lefthook": "lefthook",
     "lint": "biome check --write packages",
-    "prepare": "lefthook install",
+    "postinstall": "lefthook install || true",
     "test": "pnpm -r test",
     "x": "tsx packages/cli/src/index.ts"
   },
