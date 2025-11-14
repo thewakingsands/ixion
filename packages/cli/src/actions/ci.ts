@@ -70,9 +70,12 @@ function readReleasedVersions(): Record<string, string> {
   }
 }
 
-function calculateHashForFile(path: string): string | undefined {
+function calculateHashForFile(
+  path: string,
+  type: 'sha1' | 'sha256' = 'sha1',
+): string | undefined {
   try {
-    const hash = createHash('sha1')
+    const hash = createHash(type)
     hash.update(readFileSync(path))
     return hash.digest('hex').slice(0, 8)
   } catch (e) {
@@ -205,6 +208,14 @@ async function createGitHubRelease(
   const date = new Date().toISOString().replace(/[-:]/g, '').split('T')[0]
   const name = `${date}-${hash.stdout.trim().slice(0, 7)}`
 
+  // calc sha256sum of merged archive
+  const mergedArchive = archives.find(
+    ({ server }) => server === mergedVersionServer,
+  )
+  const sha256sum = mergedArchive
+    ? calculateHashForFile(mergedArchive.path, 'sha256') || ''
+    : ''
+
   // Create release
   const release = await octokit.repos.createRelease({
     owner,
@@ -218,6 +229,7 @@ async function createGitHubRelease(
         ({ server, version, hash }) =>
           `| ${kebabCase(server)} | ${version} | ${hash?.exe || '-'} | ${hash?.excel || '-'} |`,
       ),
+      `\nsha256sum of merged archive:\n\`\`\`\n${sha256sum}\n\`\`\``,
     ].join('\n'),
     draft: false,
     prerelease: false,
