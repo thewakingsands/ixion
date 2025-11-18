@@ -86,3 +86,20 @@ export class SDOProvider extends FFXIVPatchProvider {
     super(`http://${server}/http/win32/shanda_release_chs_game/`, host)
   }
 }
+
+export class UserjoyProvider extends FFXIVPatchProvider {
+  name = 'userjoy'
+  displayName = 'Userjoy'
+  languages = [Language.ChineseTraditional]
+
+  constructor() {
+    const host = 'patch-gamever.ffxiv.com.tw'
+    const server = process.env.USERJOY_PATCH_SERVER || host
+    super(`http://${server}/http/win32/ffxivtc_release_tc_game/`, host)
+  }
+
+  async request() {
+    // skip patching for now
+    return []
+  }
+}

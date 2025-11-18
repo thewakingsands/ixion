@@ -18,6 +18,7 @@ export const languageMap = {
   chs: Language.ChineseSimplified,
   cht: Language.ChineseTraditional,
   ko: Language.Korean,
+  tc: Language.ChineseTraditional2,
 }
 
 export const languageToCodeMap: Record<Language, string> = {
@@ -29,5 +30,5 @@ export const languageToCodeMap: Record<Language, string> = {
   [Language.ChineseSimplified]: 'chs',
   [Language.ChineseTraditional]: 'cht',
   [Language.Korean]: 'ko',
-  [Language.ChineseTraditional2]: 'cht',
+  [Language.ChineseTraditional2]: 'tc',
 }
