@@ -119,7 +119,7 @@ export async function createVersionFromGame(
   }
 
   if (!version) {
-    throw new Error('Not a valid game path')
+    throw new Error(`Not a valid game path: ${gamePath}`)
   }
 
   console.log(`🎮 Recording game version: ${version}`)

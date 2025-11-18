@@ -1,5 +1,5 @@
-import { writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import {
   EXDReader,
   type ExcelColumn,
@@ -252,6 +252,7 @@ export class CSVExporter {
     addBom = true,
   ) {
     const outputFile = join(dir, csvName(sheet, language))
+    mkdirSync(dirname(outputFile), { recursive: true })
     writeFileSync(
       outputFile,
       addBom ? Buffer.concat([bom, Buffer.from(csv)]) : csv,
