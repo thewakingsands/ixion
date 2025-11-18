@@ -1,4 +1,4 @@
-export const serversToCheck = ['sdo', 'squareEnix', 'actoz', 'userjoy'] as const
+export const serversToCheck = ['sdo', 'squareEnix', 'actoz'] as const
 export const mergedVersionReference = 'sdo'
 export const mergedVersionServer = 'merged'
 
