@@ -19,9 +19,9 @@ describe('variant=1, Default', () => {
   const reader = createReader('AchievementCategory')
 
   it('should read row correctly', () => {
-    expect(reader.readRow(0)).toEqual(['', 0, true, false, 0])
-    expect(reader.readRow(1)).toEqual(['整体', 1, true, false, 1])
-    expect(reader.readRow(8)).toEqual(['排名', 2, true, true, 2])
+    expect(reader.readRow(0)).toEqual([Buffer.from(''), 0, true, false, 0])
+    expect(reader.readRow(1)).toEqual([Buffer.from('整体'), 1, true, false, 1])
+    expect(reader.readRow(8)).toEqual([Buffer.from('排名'), 2, true, true, 2])
   })
 
   it('should list row ids correctly', () => {
@@ -33,9 +33,18 @@ describe('variant=2, Subrows', () => {
   const reader = createReader('TreasureSpot')
 
   it('should read row correctly', () => {
-    expect(reader.readSubrow(0, 0)).toEqual([0, 0, 0])
-    expect(reader.readSubrow(1, 0)).toEqual([4512071, 0, 0])
-    expect(reader.readSubrow(2, 19)).toEqual([4520515, 0, 0])
+    expect(reader.readSubrow(0, 0)).toEqual({
+      subRowId: 0,
+      data: [0, 0, 0],
+    })
+    expect(reader.readSubrow(1, 0)).toEqual({
+      subRowId: 0,
+      data: [4512071, 0, 0],
+    })
+    expect(reader.readSubrow(2, 19)).toEqual({
+      subRowId: 19,
+      data: [4520515, 0, 0],
+    })
   })
 
   it('should list row ids correctly', () => {

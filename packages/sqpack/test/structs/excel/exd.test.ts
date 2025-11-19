@@ -64,7 +64,7 @@ describe('Excel EXD Data Structs', () => {
       expect(getExdPath('Item', 0, Language.ChineseTraditional)).toBe(
         'exd/Item_0_cht.exd',
       )
-      expect(getExdPath('Item', 0, Language.Korean)).toBe('exd/Item_0_kr.exd')
+      expect(getExdPath('Item', 0, Language.Korean)).toBe('exd/Item_0_ko.exd')
     })
 
     it('should generate correct EXD paths with different start IDs', () => {
