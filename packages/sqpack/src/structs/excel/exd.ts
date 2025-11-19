@@ -28,6 +28,8 @@ export interface ExcelDataOffset {
   offset: number
 }
 
+export const excelDataHeaderSizeWithoutOffsetMap = 32
+export const excelDataOffsetSize = 8
 export const readExcelDataHeader = (buffer: SmartBuffer): ExcelDataHeader => {
   const magic = buffer.readString(4)
   const version = buffer.readUInt16BE()
@@ -37,7 +39,7 @@ export const readExcelDataHeader = (buffer: SmartBuffer): ExcelDataHeader => {
 
   buffer.readOffset += 16
 
-  const count = indexSize / 8
+  const count = indexSize / excelDataOffsetSize
   const offsetMap = new Map<number, number>()
   for (let i = 0; i < count; i++) {
     const rowId = buffer.readUInt32BE()
@@ -86,6 +88,14 @@ export const readExcelDataRowHeader = (
   const dataSize = buffer.readUInt32BE()
   const rowCount = buffer.readUInt16BE()
   return { dataSize, rowCount }
+}
+
+export const writeExcelDataRowHeader = (
+  buffer: SmartBuffer,
+  header: ExcelDataRowHeader,
+): void => {
+  buffer.writeUInt32BE(header.dataSize)
+  buffer.writeUInt16BE(header.rowCount)
 }
 
 export const subRowIdSize = 2
