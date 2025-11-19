@@ -1,8 +1,11 @@
 import { SmartBuffer } from 'smart-buffer'
 import {
   excelDataRowHeaderSize,
+  type IExdDataRow,
+  type IExdDataSubRow,
   readExcelDataHeader,
   readExcelDataRowHeader,
+  subRowIdSize,
 } from './exd'
 import {
   type ExcelColumn,
@@ -11,11 +14,10 @@ import {
   type ExhHeader,
 } from './exh'
 
-const subRowIdSize = 2
 export class EXDReader {
   private buffer: SmartBuffer
   private offsetMap: Map<number, number>
-  private dataOffset: number
+  private rowDataSize: number
   private variant: ExcelVariant
   private columns: ExcelColumn[]
 
@@ -23,7 +25,7 @@ export class EXDReader {
     this.buffer = SmartBuffer.fromBuffer(buffer)
     const exdHeader = readExcelDataHeader(this.buffer)
     this.offsetMap = exdHeader.offsetMap
-    this.dataOffset = exhHeader.dataOffset
+    this.rowDataSize = exhHeader.dataOffset
     this.variant = exhHeader.variant
     this.columns = exhHeader.columns
   }
@@ -41,13 +43,7 @@ export class EXDReader {
     return this.readColumns(offset)
   }
 
-  readSubrow(
-    rowId: number,
-    subRowIndex: number,
-  ): {
-    subRowId: number
-    columns: any[]
-  } {
+  readSubrow(rowId: number, subRowIndex: number): IExdDataSubRow {
     const { offset, rowCount } = this.readRowHeader(rowId)
     if (subRowIndex >= rowCount) {
       throw new Error(
@@ -55,15 +51,33 @@ export class EXDReader {
       )
     }
 
-    const subRowOffset = offset + subRowIndex * (this.dataOffset + subRowIdSize)
+    const subRowOffset =
+      offset + subRowIndex * (this.rowDataSize + subRowIdSize)
     return {
       subRowId: this.readSubRowId(subRowOffset),
-      columns: this.readColumns(subRowOffset + subRowIdSize),
+      data: this.readColumns(subRowOffset + subRowIdSize),
     }
   }
 
   listRowIds() {
     return Array.from(this.offsetMap.keys())
+  }
+
+  readRows(): IExdDataRow[] {
+    const rows: IExdDataRow[] = []
+    for (const rowId of this.listRowIds()) {
+      if (this.isSubrows) {
+        const subRows: IExdDataSubRow[] = []
+        for (let i = 0; i < this.getSubRowCount(rowId); i++) {
+          subRows.push(this.readSubrow(rowId, i))
+        }
+
+        rows.push({ rowId, data: subRows })
+      } else {
+        rows.push({ rowId, data: this.readRow(rowId) })
+      }
+    }
+    return rows
   }
 
   getSubRowCount(rowId: number) {
@@ -142,7 +156,7 @@ export class EXDReader {
    * @returns string
    */
   private readString(rowOffset: number, columnValue: number): Buffer {
-    this.buffer.readOffset = rowOffset + this.dataOffset + columnValue
+    this.buffer.readOffset = rowOffset + this.rowDataSize + columnValue
     return this.buffer.readBufferNT()
   }
 

@@ -87,3 +87,15 @@ export const readExcelDataRowHeader = (
   const rowCount = buffer.readUInt16BE()
   return { dataSize, rowCount }
 }
+
+export const subRowIdSize = 2
+
+export interface IExdDataRow {
+  rowId: number
+  data: any[]
+}
+
+export interface IExdDataSubRow {
+  subRowId: number
+  data: any[]
+}

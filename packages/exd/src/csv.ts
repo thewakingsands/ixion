@@ -215,9 +215,9 @@ export class CSVExporter {
             index < exdReader.getSubRowCount(rowId);
             index++
           ) {
-            const { subRowId, columns } = exdReader.readSubrow(rowId, index)
+            const { subRowId, data } = exdReader.readSubrow(rowId, index)
             try {
-              lines.push(this.formatData(`${rowId}.${subRowId}`, columns))
+              lines.push(this.formatData(`${rowId}.${subRowId}`, data))
             } catch (error) {
               console.warn('Columns:', header)
               throw new Error(
