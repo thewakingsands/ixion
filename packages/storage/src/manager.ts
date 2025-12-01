@@ -1,4 +1,5 @@
 import { tmpdir } from 'node:os'
+import { sortVersions } from '@ffcafe/ixion-utils'
 import type { AbstractStorage, StorageConfig, VersionData } from './abstract'
 import { LocalStorage } from './adapter/local'
 import { MinioStorage } from './adapter/minio'
@@ -155,7 +156,7 @@ export class StorageManager {
       }
     }
 
-    return Array.from(allVersions).sort()
+    return sortVersions(Array.from(allVersions))
   }
 
   /**
