@@ -90,7 +90,7 @@ export class SDOProvider extends FFXIVPatchProvider {
 export class UserjoyProvider extends FFXIVPatchProvider {
   name = 'userjoy'
   displayName = 'Userjoy'
-  languages = [Language.ChineseTraditional]
+  languages = [Language.ChineseTraditional2]
 
   constructor() {
     const host = 'patch-gamever.ffxiv.com.tw'
