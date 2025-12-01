@@ -10,5 +10,7 @@ temp-*
 
 # Version files
 .ci/archives
+.ci/sqpack
+
 outputs
 versions
