@@ -1,7 +1,14 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { basename, join } from 'node:path'
 import { createExdFilter } from '@ffcafe/ixion-exd'
 import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
+import { exdSqPackFile, files } from '../../../config'
 import { kebabCase } from '../../../utils/case'
 import { calculateHashForArchive } from '../../../utils/hash'
 import { getTempDir, getWorkingDir } from '../../../utils/root'
@@ -19,11 +26,17 @@ import { readReleasedVersions } from '../version'
 /**
  * Create zip archive from version files
  */
-async function createServerArchive(
-  server: string,
-  version: string,
-  outputPath: string,
-) {
+async function createServerArchive({
+  server,
+  version,
+  outputPath,
+  sqpackPath,
+}: {
+  server: string
+  version: string
+  outputPath: string
+  sqpackPath: string
+}) {
   const storageManager = getStorageManager()
   const tempDir = await getTempDir()
   console.log(`📂 Created temporary directory: ${tempDir}`)
@@ -35,11 +48,18 @@ async function createServerArchive(
     const verPath = join(tempDir, 'ffxivgame.ver')
     writeFileSync(verPath, version, 'utf-8')
 
+    // copy sqpack to sqpack dir
+    const sqpackDir = join(sqpackPath, server)
+    mkdirSync(sqpackDir, { recursive: true })
+    for (const file of files) {
+      copyFileSync(join(tempDir, file), join(sqpackDir, basename(file)))
+    }
+
     await compressDirectoryToFile(tempDir, outputPath)
     return calculateHashForArchive(tempDir)
   } finally {
     // Clean up temporary directory
-    console.log(`\n🧹 Cleaning up temporary directory: ${tempDir}`)
+    console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
     rmSync(tempDir, { recursive: true, force: true })
   }
 }
@@ -47,11 +67,15 @@ async function createServerArchive(
 /**
  * Create merged archive from EXD files of different servers
  */
-async function createMergedArchive(
-  version: string,
-  serverVersions: ServerVersion[],
-  outputPath: string,
-) {
+async function createMergedArchive({
+  version,
+  serverVersions,
+  outputPath,
+}: {
+  version: string
+  serverVersions: ServerVersion[]
+  outputPath: string
+}) {
   const tempDir = await getTempDir()
   console.log(`📂 Created temporary directory: ${tempDir}`)
 
@@ -74,7 +98,7 @@ async function createMergedArchive(
     return calculateHashForArchive(tempDir)
   } finally {
     // Clean up temporary directory
-    console.log(`\n🧹 Cleaning up temporary directory: ${tempDir}`)
+    console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
     rmSync(tempDir, { recursive: true, force: true })
   }
 }
@@ -112,31 +136,48 @@ export async function createRelease(
     server: serverName,
     version: currentVersions[serverName] || '',
   }))
-  const mergedVersion = {
-    server: mergedVersionServer,
-    version: currentVersions[mergedVersionReference] || '',
-  }
-  const archives: Archive[] = [...serverVersions, mergedVersion].map(
-    (archive) => ({
-      ...archive,
-      path: join(
-        archiveDir,
-        `${kebabCase(archive.server)}-${archive.version}.zip`,
-      ),
-    }),
-  )
+  const sqpackPath = join(cwd, '.ci/sqpack')
+  const archives: Archive[] = []
 
   // Create archives for each server
-  for (const item of archives) {
-    const { server, version, path } = item
-    if (server === mergedVersionServer) {
-      console.log(`📂 Creating merged archive for ${mergedVersionServer}`)
-      item.hash = await createMergedArchive(version, serverVersions, path)
-    } else {
-      console.log(`📂 Creating archive for ${server}: ${version}`)
-      item.hash = await createServerArchive(server, version, path)
-    }
+  for (const item of serverVersions) {
+    const { server, version } = item
+    console.log(`📂 Creating archive for ${server}: ${version}`)
+    const path = join(archiveDir, `${kebabCase(server)}-${version}.zip`)
+    const hash = await createServerArchive({
+      server,
+      version,
+      outputPath: path,
+      sqpackPath,
+    })
+
+    archives.push({
+      server,
+      version,
+      sqpackPrefix: join(sqpackPath, server, basename(exdSqPackFile)),
+      path,
+      hash,
+    })
   }
+
+  // Create merged archive
+  console.log(`📂 Creating merged archive for ${mergedVersionServer}`)
+  const mergedVersion = currentVersions[mergedVersionReference] || ''
+  const mergedPath = join(
+    archiveDir,
+    `${kebabCase(mergedVersionServer)}-${mergedVersion}.zip`,
+  )
+  const mergedHash = await createMergedArchive({
+    version: mergedVersion,
+    serverVersions: archives,
+    outputPath: mergedPath,
+  })
+  archives.push({
+    server: mergedVersionServer,
+    version: mergedVersion,
+    path: mergedPath,
+    hash: mergedHash,
+  })
 
   // Create GitHub release or print file names
   if (isGitHubActions()) {

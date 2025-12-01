@@ -22,6 +22,7 @@ const debug = $debug('ixion:exd-build')
 export interface ServerVersion {
   server: string
   version: string
+  sqpackPrefix?: string
 }
 
 export interface BuildOptions {
@@ -59,14 +60,18 @@ export async function buildExdFiles({
 
   try {
     // Download all versions to temporary directories
-    for (const { server, version } of serverVersions) {
-      const tempDir = await getTempDir()
-      tempDirs.push(tempDir)
+    for (const { server, version, sqpackPrefix } of serverVersions) {
+      let prefix = sqpackPrefix
+      if (!prefix) {
+        const tempDir = await getTempDir()
+        tempDirs.push(tempDir)
 
-      await storageManager.downloadVersion(server, version, tempDir)
+        await storageManager.downloadVersion(server, version, tempDir)
 
-      const sqPackPrefix = join(tempDir, exdSqPackFile)
-      const reader = await SqPackReader.open({ prefix: sqPackPrefix })
+        prefix = join(tempDir, exdSqPackFile)
+      }
+
+      const reader = await SqPackReader.open({ prefix })
       readers.push({ reader, server, version })
     }
 
