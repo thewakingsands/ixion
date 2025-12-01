@@ -97,9 +97,4 @@ export class UserjoyProvider extends FFXIVPatchProvider {
     const server = process.env.USERJOY_PATCH_SERVER || host
     super(`http://${server}/http/win32/ffxivtc_release_tc_game/`, host)
   }
-
-  async request() {
-    // skip patching for now
-    return []
-  }
 }
