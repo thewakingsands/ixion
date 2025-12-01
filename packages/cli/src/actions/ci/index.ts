@@ -3,7 +3,7 @@ import { createConfigFromTemplate } from './init'
 import { createRelease } from './steps/release'
 import { checkAndUpdateVersions } from './steps/update'
 
-export const ciUpdateCommand = async () => {
+export const ciUpdateCommand = async (skipUpdate = false) => {
   try {
     console.log('🔍 Running CI actions...')
 
@@ -11,7 +11,10 @@ export const ciUpdateCommand = async () => {
     const storageManager = getStorageManager()
 
     // Step 2: Run update for all servers
-    const currentVersions = await checkAndUpdateVersions(storageManager)
+    const currentVersions = await checkAndUpdateVersions(
+      storageManager,
+      skipUpdate,
+    )
 
     // Step 3: Check if versions changed and create releases
     await createRelease(currentVersions)

@@ -12,6 +12,7 @@ export const registerCiCommand = (program: Command) => {
   ciCmd
     .command('update')
     .description('Update game to the latest version')
+    .option('-s, --skip-update', 'Skip update')
     .action(ciUpdateCommand)
 
   return ciCmd

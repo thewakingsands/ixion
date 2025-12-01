@@ -4,6 +4,7 @@ import { serversToCheck } from '../constants'
 
 export async function checkAndUpdateVersions(
   storageManager: StorageManager,
+  skipUpdate = false,
 ): Promise<Record<string, string>> {
   const currentVersions: Record<string, string> = {}
   console.log('\n📡 Checking remote versions...')
@@ -18,13 +19,17 @@ export async function checkAndUpdateVersions(
   }
 
   // Step 3: Run update for both servers
-  console.log('\n🔄 Running updates...')
-  for (const serverName of serversToCheck) {
-    const updateResult = await updateCommand({
-      server: serverName,
-    } as UpdateOptions)
+  if (skipUpdate) {
+    console.log('\n🔄 Skipping updates...')
+  } else {
+    console.log('\n🔄 Running updates...')
+    for (const serverName of serversToCheck) {
+      const updateResult = await updateCommand({
+        server: serverName,
+      } as UpdateOptions)
 
-    currentVersions[serverName] = updateResult.afterVersion
+      currentVersions[serverName] = updateResult.afterVersion
+    }
   }
 
   return currentVersions
