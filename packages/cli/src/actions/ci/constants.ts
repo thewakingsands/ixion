@@ -4,3 +4,6 @@ export const mergedVersionServer = 'merged'
 
 export const ciVersionsPath = '.ci/versions.json'
 export const ciVersionMessage = 'ci: update released versions'
+
+export const ciGitUserName = 'FFCAFE Automation'
+export const ciGitUserEmail = 'actions@github.com'

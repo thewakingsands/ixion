@@ -6,6 +6,8 @@ import { $ } from 'execa'
 import { kebabCase } from '../../utils/case'
 import { calculateHashForFile } from '../../utils/hash'
 import {
+  ciGitUserEmail,
+  ciGitUserName,
   ciVersionMessage,
   ciVersionsPath,
   mergedVersionServer,
@@ -21,11 +23,8 @@ export function isGitHubActions(): boolean {
 }
 
 async function configGit(): Promise<void> {
-  const name = process.env.GITHUB_ACTOR ?? ''
-  const email = `${name}@users.noreply.github.com`
-
-  await $`git config user.name ${name}`
-  await $`git config user.email ${email}`
+  await $`git config --global user.name ${ciGitUserName}`
+  await $`git config --global user.email ${ciGitUserEmail}`
 }
 
 export async function commitAndPush(
