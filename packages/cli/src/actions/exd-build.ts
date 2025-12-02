@@ -89,7 +89,7 @@ class ExdBuilder {
 
   async build() {
     const rootExl = await this.#readRootExl()
-    console.log(`📋 Processing ${rootExl.entries.length} filtered sheets...`)
+    console.log(`📋 Processing ${rootExl.entries.length} filtered sheets...\n`)
 
     for (const entry of rootExl.entries) {
       await this.buildSheet(entry.name)
@@ -139,10 +139,13 @@ class ExdBuilder {
       } catch (error: unknown) {
         compatible = false
         console.warn(
-          `%s: Headers are not compatible between %s and %s: %s`,
+          `%s: Headers are not compatible between %s and %s`,
           sheetName,
           firstSheetInfo.languages.map(formatLanguage).join(', '),
           sheetInfo.languages.map(formatLanguage).join(', '),
+        )
+        console.warn(
+          '  Reason: %s',
           error instanceof Error ? error.message : String(error),
         )
       }
@@ -154,17 +157,12 @@ class ExdBuilder {
           await this.#mergeExdFiles(sheetName, firstSheetInfo, sheetInfo)
         } catch (error: unknown) {
           console.warn(
-            `%s: Failed to merge between %s and %s: %s`,
-            sheetName,
-            firstSheetInfo.server,
-            firstSheetInfo.version,
-            sheetInfo.server,
-            sheetInfo.version,
+            `  Merge failed: `,
             error instanceof Error ? error.message : String(error),
           )
 
           console.warn(
-            `Falling back to copying data from ${sheetInfo.server}:${sheetInfo.version}`,
+            `  Falling back to copying data from ${sheetInfo.server}:${sheetInfo.version}`,
           )
           await this.#copyExdFiles(sheetName, sheetInfo)
         }
@@ -178,7 +176,7 @@ class ExdBuilder {
     if (restLanguages.length > 0) {
       const fromLanguage = firstSheetInfo.languages[0]
       console.warn(
-        `Copying data from ${formatLanguage(fromLanguage)} to ${restLanguages.map(formatLanguage).join(', ')}`,
+        `  Copying data from ${formatLanguage(fromLanguage)} to ${restLanguages.map(formatLanguage).join(', ')}`,
       )
 
       await this.#copyExdFiles(
@@ -260,9 +258,7 @@ class ExdBuilder {
     for (const { reader, server, version } of this.readers) {
       const data = await reader.readFile(exhPath)
       if (!data) {
-        console.warn(
-          `Failed to read ${exhPath} from server ${server} (${version})`,
-        )
+        console.warn('%s: not found in %s:%s', sheetName, server, version)
         continue
       }
 
