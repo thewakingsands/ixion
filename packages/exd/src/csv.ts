@@ -108,7 +108,12 @@ export class CSVExporter {
           return `"${formatSeString(seString).replace(/"/g, '""')}"`
         } catch (error) {
           const hex = value.toString('hex')
-          console.warn('Failed parsing hex', hex, 'as SeString:', error)
+          console.warn(
+            'Failed parsing hex',
+            hex,
+            'as SeString:',
+            error instanceof Error ? error.message : error,
+          )
           return `__HEX__${hex}`
         }
       }

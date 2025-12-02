@@ -144,12 +144,22 @@ export function formatSeString(seString: SeString): string {
       switch (payloadType) {
         // SaintCoinach formats SeString as a string with hex values for certain tags
         case Type.Fixed:
+        case Type.ResetTime:
         case Type.UIForeground:
         case Type.UIGlow:
         case Type.Unknown0A:
         case Type.Unknown14:
+        case Type.Unknown17:
         case Type.Unknown2D:
         case Type.Unknown60:
+        // Known unhandled tags
+        case 27 as Type:
+        case 28 as Type:
+        case 38 as Type:
+        case 65 as Type:
+        case 66 as Type:
+        case 81 as Type:
+        case 97 as Type:
           parts.push(
             formatHexValueTag(
               tagName,
