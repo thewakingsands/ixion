@@ -107,6 +107,8 @@ jobs:
           default_author: github_actions
           author_name: FFCAFE Automation
           message: "ver ${{ steps.export-csv.outputs.version }}"
+          tag: 'ver-${{ steps.export-csv.outputs.version }} --force'
+          tag_push: '--force'
 
   datamining-tc:
     runs-on: ubuntu-latest
@@ -148,3 +150,5 @@ jobs:
           default_author: github_actions
           author_name: FFCAFE Automation
           message: "ver ${{ steps.export-csv.outputs.version }}"
+          tag: 'ver-${{ steps.export-csv.outputs.version }} --force'
+          tag_push: '--force'
