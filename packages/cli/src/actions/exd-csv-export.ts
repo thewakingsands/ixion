@@ -1,7 +1,11 @@
 import { rmSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { CSVExporter, type ExdCSVFormat } from '@ffcafe/ixion-exd'
+import {
+  CSVExporter,
+  type DefinitionProvider,
+  type ExdCSVFormat,
+} from '@ffcafe/ixion-exd'
 import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import type { Language } from '@ffcafe/ixion-utils'
 import { exdSqPackFile } from '../config'
@@ -15,7 +19,7 @@ export async function exportExdFilesToCSV({
   outputDir,
   languages,
   format,
-  definitionDir,
+  definitions,
   crlf,
   filter,
 }: {
@@ -24,7 +28,7 @@ export async function exportExdFilesToCSV({
   outputDir: string
   languages: Language[]
   format: ExdCSVFormat
-  definitionDir: string
+  definitions: DefinitionProvider
   crlf: boolean
   filter?: (path: string) => boolean
 }) {
@@ -45,7 +49,7 @@ export async function exportExdFilesToCSV({
   const tempDir = await getTempDir()
   try {
     const csvExporter = new CSVExporter({
-      definitionDir,
+      definitions,
       crlf,
     })
     await storageManager.downloadVersion(server, localVersion, tempDir)

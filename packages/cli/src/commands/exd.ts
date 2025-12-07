@@ -1,6 +1,10 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createExdFilter, ExdCSVFormat } from '@ffcafe/ixion-exd'
+import {
+  createExdFilter,
+  ExdCSVFormat,
+  SaintcoinachDefinitionProvider,
+} from '@ffcafe/ixion-exd'
 import { servers } from '@ffcafe/ixion-server'
 import {
   type Language,
@@ -366,9 +370,10 @@ export function registerExdCommand(program: Command) {
     .option('-s, --server <name>', 'Server name for storage operations')
     .option('-v, --version <version>', 'Version to export from')
     .option(
-      '--definition-dir <dir>',
+      '--saintcoinach <dir>',
       'Directory containing SaintCoinach definitions',
     )
+    .option('--exd-schema <dir>', 'Directory containing EXDSchema definitions')
     .option(
       '-l, --language <lang...>',
       'Languages to export (e.g., ja, en, chs)',
@@ -393,7 +398,7 @@ export function registerExdCommand(program: Command) {
         options: {
           server?: string
           version?: string
-          definitionDir?: string
+          saintcoinach?: string
           language?: string[]
           format?: string
           crlf?: boolean
@@ -403,9 +408,13 @@ export function registerExdCommand(program: Command) {
       ) => {
         try {
           // Get definition directory
-          const definitionDir =
-            options.definitionDir ||
-            join(getWorkingDir(), 'lib/SaintCoinach/SaintCoinach/Definitions')
+          const definitions = new SaintcoinachDefinitionProvider(
+            options.saintcoinach ||
+              join(
+                getWorkingDir(),
+                'lib/SaintCoinach/SaintCoinach/Definitions',
+              ),
+          )
 
           const server = options.server
           if (!server) {
@@ -460,7 +469,7 @@ export function registerExdCommand(program: Command) {
             outputDir,
             languages,
             format,
-            definitionDir,
+            definitions,
             crlf: options.crlf || false,
             filter,
           })

@@ -9,10 +9,7 @@ import {
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
 import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
-import {
-  generateFlatFields,
-  loadSaintcoinachDefinition,
-} from './schema/saintcoinach'
+import type { DefinitionProvider } from './schema/interface'
 import { getSaintcoinachType } from './schema/utils'
 import { formatSeString, parseSeString } from './sestring'
 import {
@@ -50,21 +47,19 @@ const csvName = (sheet: string, language?: Language) => {
 }
 
 interface CSVExporterOptions {
-  definitionDir: string
+  definitions: DefinitionProvider
   crlf?: boolean
 }
 
 const bom = Buffer.from([0xef, 0xbb, 0xbf])
 export class CSVExporter {
-  constructor(private readonly options: CSVExporterOptions) {}
+  private readonly definitions: DefinitionProvider
+  constructor(private readonly options: CSVExporterOptions) {
+    this.definitions = options.definitions
+  }
 
   async formatHeader(sheet: string, columns: ExcelColumn[]): Promise<string[]> {
-    const definition = await loadSaintcoinachDefinition(
-      this.options.definitionDir,
-      sheet,
-    )
-
-    const fields = generateFlatFields(definition)
+    const fields = await this.definitions.getFlatFields(sheet)
 
     return [
       `key,${columns.map((_, index) => index).join(',')}`,

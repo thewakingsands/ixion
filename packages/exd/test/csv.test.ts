@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import { Language } from '@ffcafe/ixion-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { readExhHeaderFromReader } from '../src'
+import { readExhHeaderFromReader, SaintcoinachDefinitionProvider } from '../src'
 import { CSVExporter } from '../src/csv'
 
 describe('exdSheetToCSV', () => {
@@ -14,9 +14,8 @@ describe('exdSheetToCSV', () => {
       prefix: join(__dirname, '../../../outputs/7.35/0a0000.win32'),
     })
     csvExporter = new CSVExporter({
-      definitionDir: join(
-        __dirname,
-        '../../../lib/SaintCoinach/SaintCoinach/Definitions',
+      definitions: new SaintcoinachDefinitionProvider(
+        join(__dirname, '../../../lib/SaintCoinach/SaintCoinach/Definitions'),
       ),
     })
   })

@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { FlatField } from '../interface'
+import type { DefinitionProvider, FlatField } from '../interface'
 import { Data, DefinitionSchema } from './interface'
 
-export async function loadSaintcoinachDefinition(dir: string, sheet: string) {
+async function loadSaintcoinachDefinition(dir: string, sheet: string) {
   const fileName = `${sheet}.json`
   try {
     const data = JSON.parse(await readFile(join(dir, fileName), 'utf-8'))
@@ -39,7 +39,7 @@ function extractLink(converter: any): string | undefined {
   }
 }
 
-export function generateFlatFields(definition: DefinitionSchema | null) {
+function generateFlatFields(definition: DefinitionSchema | null) {
   const fields: FlatField[] = []
   if (!definition) {
     return fields
@@ -85,4 +85,17 @@ export function generateFlatFields(definition: DefinitionSchema | null) {
   }
 
   return fields
+}
+
+export class SaintcoinachDefinitionProvider implements DefinitionProvider {
+  constructor(private readonly dir: string) {}
+
+  async getFlatFields(sheet: string): Promise<FlatField[]> {
+    const definition = await loadSaintcoinachDefinition(this.dir, sheet)
+    if (!definition) {
+      return []
+    }
+
+    return generateFlatFields(definition)
+  }
 }
