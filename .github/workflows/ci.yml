@@ -54,11 +54,15 @@ jobs:
             .ixion-config.ci.json
             package.json
   ci:
+    if: inputs.skip_update != true
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ixion-cli
       - name: Run CI update command
-        if: inputs.skip_update != true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
@@ -115,7 +119,7 @@ jobs:
 
   datamining-tc:
     runs-on: ubuntu-latest
-    needs: build
+    needs: ci
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
