@@ -33,6 +33,7 @@ export async function commitAndPush(
 ): Promise<string> {
   await configGit()
 
+  await $`git pull`
   await $`git add ${path}`
   await $`git commit -m ${message}`
   await $`git push`
