@@ -40,7 +40,7 @@ jobs:
           pnpm install --prod
 
       - name: Run CI update command
-        if: inputs.skip_update != false
+        if: inputs.skip_update == false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
