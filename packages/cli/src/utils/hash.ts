@@ -11,7 +11,7 @@ export function calculateHashForFile(
   try {
     const hash = createHash(type)
     hash.update(readFileSync(path))
-    return hash.digest('hex').slice(0, 8)
+    return hash.digest('hex')
   } catch (e) {
     if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
       return undefined

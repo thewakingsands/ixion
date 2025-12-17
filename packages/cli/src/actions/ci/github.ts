@@ -84,7 +84,7 @@ export async function createGitHubRelease(
       '| ------ | ------- | ------- | ------ |',
       ...archives.map(
         ({ server, version, hash }) =>
-          `| ${kebabCase(server)} | ${version} | ${hash?.exe || '-'} | ${hash?.excel || '-'} |`,
+          `| ${kebabCase(server)} | ${version} | ${hash?.exe?.slice(0, 8) || '-'} | ${hash?.excel?.slice(0, 8) || '-'} |`,
       ),
       `\nsha256sum of merged archive:\n\`\`\`\n${sha256sum}\n\`\`\``,
     ].join('\n'),
