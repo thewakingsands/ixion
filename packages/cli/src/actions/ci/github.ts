@@ -48,6 +48,7 @@ export async function commitAndPush(
 export async function createGitHubRelease(
   versions: Record<string, string>,
   archives: Archive[],
+  extraAssets: string[] = [],
 ): Promise<void> {
   const octokit = new Octokit({
     authStrategy: createActionAuth,
@@ -95,7 +96,8 @@ export async function createGitHubRelease(
   console.log(`✅ Created GitHub release: ${name}`)
 
   // Upload assets
-  for (const { path } of archives) {
+  const assets = [...archives.map(({ path }) => path), ...extraAssets]
+  for (const path of assets) {
     const archiveName = basename(path)
     const fileData = readFileSync(path)
     await octokit.repos.uploadReleaseAsset({

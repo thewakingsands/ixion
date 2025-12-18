@@ -11,9 +11,12 @@ import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
 import { exdSqPackFile, files } from '../../../config'
 import { kebabCase } from '../../../utils/case'
 import { calculateHashForArchive } from '../../../utils/hash'
+import { parseInputDefinitions } from '../../../utils/input'
 import { getTempDir, getWorkingDir } from '../../../utils/root'
 import { getStorageManager } from '../../../utils/storage'
-import { buildExdFiles, type ServerVersion } from '../../exd-build'
+import type { ServerVersion } from '../../exd-base'
+import { buildExdFiles } from '../../exd-build'
+import { exportExdStrings } from '../../exd-strings-export'
 import {
   mergedVersionReference,
   mergedVersionServer,
@@ -103,6 +106,32 @@ async function createMergedArchive({
   }
 }
 
+async function createStringsArchive({
+  serverVersions,
+  outputPath,
+}: {
+  serverVersions: ServerVersion[]
+  outputPath: string
+}): Promise<string> {
+  const tempDir = await getTempDir()
+  console.log(`📂 Created temporary directory: ${tempDir}`)
+
+  try {
+    await exportExdStrings({
+      serverVersions,
+      outputDir: join(tempDir, 'sqpack/ffxiv'),
+      definitions: parseInputDefinitions(),
+    })
+
+    await compressDirectoryToFile(tempDir, outputPath)
+    return outputPath
+  } finally {
+    // Clean up temporary directory
+    console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 export async function createRelease(
   currentVersions: Record<string, string>,
 ): Promise<void> {
@@ -137,7 +166,7 @@ export async function createRelease(
     version: currentVersions[serverName] || '',
   }))
   const sqpackPath = join(cwd, '.ci/sqpack')
-  const archives: Archive[] = []
+  const serverArchives: Archive[] = []
 
   // Create archives for each server
   for (const item of serverVersions) {
@@ -151,7 +180,7 @@ export async function createRelease(
       sqpackPath,
     })
 
-    archives.push({
+    serverArchives.push({
       server,
       version,
       sqpackPrefix: join(sqpackPath, server, basename(exdSqPackFile)),
@@ -169,20 +198,31 @@ export async function createRelease(
   )
   const mergedHash = await createMergedArchive({
     version: mergedVersion,
-    serverVersions: archives,
+    serverVersions: serverArchives,
     outputPath: mergedPath,
   })
-  archives.push({
-    server: mergedVersionServer,
-    version: mergedVersion,
-    path: mergedPath,
-    hash: mergedHash,
-  })
+  const archives = [
+    ...serverArchives,
+    {
+      server: mergedVersionServer,
+      version: mergedVersion,
+      path: mergedPath,
+      hash: mergedHash,
+    },
+  ]
+
+  // export strings
+  const extraAssets: string[] = [
+    await createStringsArchive({
+      serverVersions: serverArchives,
+      outputPath: join(archiveDir, 'strings.zip'),
+    }),
+  ]
 
   // Create GitHub release or print file names
   if (isGitHubActions()) {
     console.log('\n🚀 Creating GitHub release...')
-    await createGitHubRelease(currentVersions, archives)
+    await createGitHubRelease(currentVersions, archives, extraAssets)
   } else {
     console.log('\n📁 Archive files created:')
     for (const { path } of archives) {
