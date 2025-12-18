@@ -1,3 +1,5 @@
+import type { ExcelColumn } from '@ffcafe/ixion-sqpack'
+
 export interface FlatField {
   index: number
   name: string
@@ -5,5 +7,5 @@ export interface FlatField {
 }
 
 export interface DefinitionProvider {
-  getFlatFields(sheet: string): Promise<FlatField[]>
+  getFlatFields(sheet: string, columns: ExcelColumn[]): Promise<FlatField[]>
 }

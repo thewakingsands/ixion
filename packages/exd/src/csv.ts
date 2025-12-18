@@ -59,7 +59,7 @@ export class CSVExporter {
   }
 
   async formatHeader(sheet: string, columns: ExcelColumn[]): Promise<string[]> {
-    const fields = await this.definitions.getFlatFields(sheet)
+    const fields = await this.definitions.getFlatFields(sheet, columns)
 
     return [
       `key,${columns.map((_, index) => index).join(',')}`,
