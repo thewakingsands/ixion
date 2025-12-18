@@ -1,12 +1,10 @@
-import { rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import {
   getStringColumnIndexes,
   readColumnsFromSheet,
   rootExlFile,
   validateHeadersCompatible,
 } from '@ffcafe/ixion-exd'
-import { servers } from '@ffcafe/ixion-server'
 import {
   EXDReader,
   EXDWriter,
@@ -17,24 +15,16 @@ import {
   type IExdDataSubRow,
   readExhHeader,
   readExlFile,
-  SqPackReader,
+  type SqPackReader,
   SqPackWriter,
   writeExhHeader,
   writeExlFile,
 } from '@ffcafe/ixion-sqpack'
 import { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
-import { exdSqPackFile } from '../config'
-import { getTempDir } from '../utils/root'
-import { getStorageManager } from '../utils/storage'
+import { ExdBase, type ServerVersion } from './exd-base'
 
 const debug = $debug('ixion:exd-build')
-
-export interface ServerVersion {
-  server: string
-  version: string
-  sqpackPrefix?: string
-}
 
 export interface BuildOptions {
   serverVersions: ServerVersion[]
@@ -64,31 +54,17 @@ function isMultiLanguageSheet(languages: number[]): boolean {
   )
 }
 
-class ExdBuilder {
+class ExdBuilder extends ExdBase {
   writer: SqPackWriter
-  tempDirs: string[] = []
-  readers: Array<ServerVersion & { reader: SqPackReader }> = []
-  languages: Language[] = []
-  paths: Set<string> = new Set()
+  private paths: Set<string> = new Set()
 
   constructor(private options: BuildOptions) {
+    super(options.serverVersions)
+
     // Create SqPackWriter
     this.writer = new SqPackWriter({
       prefix: options.outputPrefix,
     })
-
-    const languages = new Set<Language>()
-    for (const { server } of options.serverVersions) {
-      for (const language of servers[server as keyof typeof servers]
-        .languages) {
-        languages.add(language)
-      }
-    }
-    this.languages = Array.from(languages)
-  }
-
-  get firstReader() {
-    return this.readers[0].reader
   }
 
   async build() {
@@ -194,27 +170,7 @@ class ExdBuilder {
     }
   }
 
-  async prepareReaders() {
-    const storageManager = getStorageManager()
-    const { serverVersions } = this.options
-    // Download all versions to temporary directories
-    for (const { server, version, sqpackPrefix } of serverVersions) {
-      let prefix = sqpackPrefix
-      if (!prefix) {
-        const tempDir = await getTempDir()
-        this.tempDirs.push(tempDir)
-
-        await storageManager.downloadVersion(server, version, tempDir)
-
-        prefix = join(tempDir, exdSqPackFile)
-      }
-
-      const reader = await SqPackReader.open({ prefix })
-      this.readers.push({ reader, server, version })
-    }
-  }
-
-  async close() {
+  override async close() {
     // Close writer
     await this.writer.close()
 
@@ -223,15 +179,7 @@ class ExdBuilder {
       Array.from(this.paths).join('\n'),
     )
 
-    // Clean up readers
-    for (const { reader } of this.readers) {
-      await reader.close()
-    }
-
-    // Clean up temporary directories
-    for (const tempDir of this.tempDirs) {
-      rmSync(tempDir, { recursive: true, force: true })
-    }
+    await super.close()
   }
 
   async #readRootExl(): Promise<ExlFile> {

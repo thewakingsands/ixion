@@ -1,4 +1,4 @@
-import type { ServerVersion } from '../exd-build'
+import type { ServerVersion } from '../exd-base'
 
 export interface Archive extends ServerVersion {
   path: string

@@ -10,9 +10,17 @@ import {
 } from './interface'
 import { Type } from './type'
 
+export interface FormatOptions {
+  debug?: boolean
+  renderToText?: boolean
+  ifBranch?: boolean
+  lineBreak?: string
+}
+
 export const readableByte = (byte: number): string => {
   return byte.toString(16).padStart(2, '0')
 }
+
 export const readableBytes = (buffer: Buffer) => {
   const result = []
   for (let i = 0; i < buffer.length; i++) {
@@ -25,35 +33,39 @@ export const formatHexValueTag = (tagName: string, tagData: Buffer) => {
   return `<${tagName}>${tagData.toString('hex').toUpperCase()}</${tagName}>`
 }
 
-export const formatNormalTag = (tagName: string, expressions: Expression[]) => {
-  return `<${tagName}>${expressions.map((expression) => formatExpression(expression)).join('')}</${tagName}>`
+export const formatNormalTag = (
+  tagName: string,
+  expressions: Expression[],
+  options: FormatOptions,
+) => {
+  return `<${tagName}>${expressions.map((expression) => formatExpression(expression, options)).join('')}</${tagName}>`
 }
 
 export const formatSelfClosingTag = (
   tagName: string,
   expressions: Expression[],
+  options: FormatOptions,
 ) => {
-  return `<${tagName}(${expressions.map((expression) => formatExpression(expression)).join(',')})/>`
+  return `<${tagName}(${expressions.map((expression) => formatExpression(expression, options)).join(',')})/>`
 }
 
-export const formatBinaryExpression = ({
-  comparison,
-  left,
-  right,
-}: BinaryExpression): string => {
+export const formatBinaryExpression = (
+  { comparison, left, right }: BinaryExpression,
+  options: FormatOptions,
+): string => {
   switch (comparison) {
     case BinaryExpressionComparison.GreaterThanOrEqualTo:
-      return `GreaterThanOrEqualTo(${formatExpression(left)},${formatExpression(right)})`
+      return `GreaterThanOrEqualTo(${formatExpression(left, options)},${formatExpression(right, options)})`
     case BinaryExpressionComparison.GreaterThan:
-      return `GreaterThan(${formatExpression(left)},${formatExpression(right)})`
+      return `GreaterThan(${formatExpression(left, options)},${formatExpression(right, options)})`
     case BinaryExpressionComparison.LessThanOrEqualTo:
-      return `LessThanOrEqualTo(${formatExpression(left)},${formatExpression(right)})`
+      return `LessThanOrEqualTo(${formatExpression(left, options)},${formatExpression(right, options)})`
     case BinaryExpressionComparison.LessThan:
-      return `LessThan(${formatExpression(left)},${formatExpression(right)})`
+      return `LessThan(${formatExpression(left, options)},${formatExpression(right, options)})`
     case BinaryExpressionComparison.Equal:
-      return `Equal(${formatExpression(left)},${formatExpression(right)})`
+      return `Equal(${formatExpression(left, options)},${formatExpression(right, options)})`
     case BinaryExpressionComparison.NotEqual:
-      return `NotEqual(${formatExpression(left)},${formatExpression(right)})`
+      return `NotEqual(${formatExpression(left, options)},${formatExpression(right, options)})`
     default:
       throw new Error(`Invalid binary expression comparison ${comparison}`)
   }
@@ -79,19 +91,19 @@ export const formatParameterExpression = ({
 
 export const formatExpression = (
   expression: Expression,
-  debug = false,
+  options: FormatOptions,
 ): string => {
   switch (expression.type) {
     case ExpressionType.Binary:
-      return formatBinaryExpression(expression)
+      return formatBinaryExpression(expression, options)
     case ExpressionType.Integer:
-      return debug
+      return options.debug
         ? `Integer(${expression.value.toString()})`
         : expression.value.toString()
     case ExpressionType.String:
-      return debug
+      return options.debug
         ? `String(${formatSeString(expression.value)})`
-        : formatSeString(expression.value)
+        : formatSeString(expression.value, options)
     case ExpressionType.Placeholder:
       return `TopLevelParameter(${expression.value})`
     case ExpressionType.Parameter:
@@ -106,20 +118,23 @@ export const formatExpression = (
 export const formatPayloadForError = (payload: Payload) => {
   return [
     'Expressions:',
-    ...payload.data.map((exp) => `  ${formatExpression(exp, true)}`),
+    ...payload.data.map((exp) => `  ${formatExpression(exp, { debug: true })}`),
     'Bytecode trace:',
     `${readableByte(payload.buffer[0])} - Start of tag`,
     `  ${readableByte(payload.type)} - Type: ${Type[payload.type]}`,
-    `  ${readableBytes(payload.lengthExpression.buffer)} - Length: ${formatExpression(payload.lengthExpression, true)}`,
+    `  ${readableBytes(payload.lengthExpression.buffer)} - Length: ${formatExpression(payload.lengthExpression, { debug: true })}`,
     ...payload.data.map(
       (exp) =>
-        `  ${readableBytes(exp.buffer)} - ${formatExpression(exp, true)}`,
+        `  ${readableBytes(exp.buffer)} - ${formatExpression(exp, { debug: true })}`,
     ),
     `${readableByte(payload.buffer[payload.buffer.length - 1])} - End of tag`,
   ].join('\n')
 }
 
-export function formatSeString(seString: SeString): string {
+export function formatSeString(
+  seString: SeString,
+  options: FormatOptions = {},
+): string {
   const parts: string[] = []
 
   for (const payload of seString) {
@@ -132,7 +147,13 @@ export function formatSeString(seString: SeString): string {
     const tagName = Type[payloadType] || `${payloadType}`
     if (payload.data.length === 0) {
       if (payloadType === Type.LineBreak) {
-        parts.push('\r\n')
+        parts.push(options.lineBreak || '\r\n')
+      } else if (options.renderToText) {
+        switch (payloadType) {
+          case Type.SoftHyphen:
+            parts.push('-')
+            break
+        }
       } else {
         parts.push(`<${tagName}/>`)
       }
@@ -151,6 +172,7 @@ export function formatSeString(seString: SeString): string {
         case Type.Unknown14:
         case Type.Unknown17:
         case Type.Unknown2D:
+
         case Type.Unknown60:
         // Known unhandled tags
         case 27 as Type:
@@ -160,12 +182,14 @@ export function formatSeString(seString: SeString): string {
         case 66 as Type:
         case 81 as Type:
         case 97 as Type:
-          parts.push(
-            formatHexValueTag(
-              tagName,
-              payload.buffer.subarray(3, payload.length - 1),
-            ),
-          )
+          if (!options.renderToText) {
+            parts.push(
+              formatHexValueTag(
+                tagName,
+                payload.buffer.subarray(3, payload.length - 1),
+              ),
+            )
+          }
           break
         case Type.If: {
           if (payload.data.length !== 3) {
@@ -174,9 +198,15 @@ export function formatSeString(seString: SeString): string {
             )
           }
           const [condition, trueValue, falseValue] = payload.data
-          parts.push(
-            `<${tagName}(${formatExpression(condition)})>${formatExpression(trueValue)}<Else/>${formatExpression(falseValue)}</${tagName}>`,
-          )
+          if (options.ifBranch === true) {
+            parts.push(formatExpression(trueValue, options))
+          } else if (options.ifBranch === false) {
+            parts.push(formatExpression(falseValue, options))
+          } else {
+            parts.push(
+              `<${tagName}(${formatExpression(condition, options)})>${formatExpression(trueValue, options)}<Else/>${formatExpression(falseValue, options)}</${tagName}>`,
+            )
+          }
           break
         }
         case Type.Switch:
@@ -186,10 +216,12 @@ export function formatSeString(seString: SeString): string {
             )
           }
 
-          parts.push(`<${tagName}(${formatExpression(payload.data[0])})>`)
+          parts.push(
+            `<${tagName}(${formatExpression(payload.data[0], options)})>`,
+          )
           for (let i = 1; i < payload.data.length; i++) {
             parts.push(
-              `<Case(${i})>${formatExpression(payload.data[i])}</Case>`,
+              `<Case(${i})>${formatExpression(payload.data[i], options)}</Case>`,
             )
           }
           parts.push(`</${tagName}>`)
@@ -201,18 +233,22 @@ export function formatSeString(seString: SeString): string {
             )
           }
 
-          const expression = payload.data[0]
-          if (expression.type === ExpressionType.Placeholder) {
-            parts.push(`</${tagName}>`)
-          } else {
-            parts.push(`<${tagName}(${formatExpression(expression)})>`)
+          if (!options.renderToText) {
+            const expression = payload.data[0]
+            if (expression.type === ExpressionType.Placeholder) {
+              parts.push(`</${tagName}>`)
+            } else {
+              parts.push(
+                `<${tagName}(${formatExpression(expression, options)})>`,
+              )
+            }
           }
           break
         }
         case Type.Value:
         case Type.Highlight:
         case Type.TwoDigitValue:
-          parts.push(formatNormalTag(tagName, payload.data))
+          parts.push(formatNormalTag(tagName, payload.data, options))
           break
         case Type.CommandIcon:
         case Type.Clickable:
@@ -224,7 +260,9 @@ export function formatSeString(seString: SeString): string {
         case Type.SheetFr:
         case Type.SheetJa:
         case Type.Split:
-          parts.push(formatSelfClosingTag(tagName, payload.data))
+          if (!options.renderToText) {
+            parts.push(formatSelfClosingTag(tagName, payload.data, options))
+          }
           break
         case Type.ZeroPaddedValue: {
           if (payload.data.length !== 2) {
@@ -235,7 +273,7 @@ export function formatSeString(seString: SeString): string {
 
           const [value, length] = payload.data
           parts.push(
-            `<${tagName}(${formatExpression(length)})>${formatExpression(value)}</${tagName}>`,
+            `<${tagName}(${formatExpression(length, options)})>${formatExpression(value, options)}</${tagName}>`,
           )
           break
         }
@@ -248,7 +286,7 @@ export function formatSeString(seString: SeString): string {
 
           const [arg, data] = payload.data
           parts.push(
-            `<${tagName}(${formatExpression(arg)},${data.buffer.toString('hex').toUpperCase()})/>`,
+            `<${tagName}(${formatExpression(arg, options)},${data.buffer.toString('hex').toUpperCase()})/>`,
           )
           break
         }
@@ -272,12 +310,14 @@ export function formatSeString(seString: SeString): string {
         }
         default:
           console.warn(`Unknown tag type ${payloadType} ${tagName}`)
-          parts.push(
-            formatHexValueTag(
-              tagName,
-              payload.buffer.subarray(3, payload.length - 1),
-            ),
-          )
+          if (!options.renderToText) {
+            parts.push(
+              formatHexValueTag(
+                tagName,
+                payload.buffer.subarray(3, payload.length - 1),
+              ),
+            )
+          }
           break
       }
     } catch (error: unknown) {

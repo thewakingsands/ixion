@@ -1,23 +1,17 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import {
-  createExdFilter,
-  ExdCSVFormat,
-  SaintcoinachDefinitionProvider,
-} from '@ffcafe/ixion-exd'
+import { createExdFilter, ExdCSVFormat } from '@ffcafe/ixion-exd'
 import { servers } from '@ffcafe/ixion-server'
-import {
-  type Language,
-  languageMap,
-  languageToCodeMap,
-} from '@ffcafe/ixion-utils'
+import { languageToCodeMap } from '@ffcafe/ixion-utils'
 import type { Command } from 'commander'
-import { buildExdFiles, type ServerVersion } from '../actions/exd-build'
+import { parseServerVersions } from '../actions/exd-base'
+import { buildExdFiles } from '../actions/exd-build'
 import { exportExdFilesToCSV } from '../actions/exd-csv-export'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
+import { exportExdStrings } from '../actions/exd-strings-export'
 import { verifyExdFilesFromStorage } from '../actions/exd-verify'
-import { getWorkingDir } from '../utils/root'
+import { parseInputDefinitions, parseInputLanguages } from '../utils/input'
 import { getServerLanguages } from '../utils/server'
 import { getStorageManager } from '../utils/storage'
 
@@ -126,7 +120,7 @@ export function registerExdCommand(program: Command) {
     )
     .option(
       '-m, --mapping <mappings...>',
-      'Server:version mapping (e.g., "default:2024.01.01 actoz:2024.01.02")',
+      'Server:version mapping (e.g., "-m actoz:2024.01.02.0000.0000"). Version is optional and will use the latest version if not provided.',
     )
     .option(
       '--root-only',
@@ -146,35 +140,7 @@ export function registerExdCommand(program: Command) {
           name?: string[]
         },
       ) => {
-        if (!options.mapping) {
-          console.error('❌ mapping is required')
-          console.log(
-            'Example: -m sdo:2024.01.01.0000.0000 -m actoz:2024.01.02.0000.0000',
-          )
-          process.exit(1)
-        }
-
-        // Parse server:version mappings
-        const serverVersions: ServerVersion[] = []
-        const mappings = options.mapping
-
-        for (const mapping of mappings) {
-          const [server, version] = mapping.split(':')
-          if (!server || !version) {
-            console.error(`❌ Invalid server:version mapping: "${mapping}"`)
-            console.log('Expected format: "server:version"')
-            process.exit(1)
-          }
-          serverVersions.push({
-            server: server.trim(),
-            version: version.trim(),
-          })
-        }
-
-        if (serverVersions.length === 0) {
-          console.error('❌ No valid server:version mappings provided')
-          process.exit(1)
-        }
+        const serverVersions = parseServerVersions(options.mapping)
 
         const { filter, description } = createExdFilter(
           options.name,
@@ -408,13 +374,7 @@ export function registerExdCommand(program: Command) {
       ) => {
         try {
           // Get definition directory
-          const definitions = new SaintcoinachDefinitionProvider(
-            options.saintcoinach ||
-              join(
-                getWorkingDir(),
-                'lib/SaintCoinach/SaintCoinach/Definitions',
-              ),
-          )
+          const definitions = parseInputDefinitions(options.saintcoinach)
 
           const server = options.server
           if (!server) {
@@ -423,21 +383,7 @@ export function registerExdCommand(program: Command) {
           }
 
           // Parse languages
-          const languages: Language[] = []
-          if (options.language && options.language.length > 0) {
-            for (const lang of options.language) {
-              if (lang in languageMap) {
-                languages.push(languageMap[lang as keyof typeof languageMap])
-              } else {
-                console.error(`❌ Unknown language: ${lang}`)
-                console.log(
-                  `Available languages: ${Object.keys(languageMap).join(', ')}`,
-                )
-                process.exit(1)
-              }
-            }
-          }
-
+          const languages = parseInputLanguages(options.language)
           if (languages.length === 0) {
             languages.push(...getServerLanguages(server))
           }
@@ -475,6 +421,64 @@ export function registerExdCommand(program: Command) {
           })
         } catch (error) {
           console.error('❌ CSV export failed:', error)
+          process.exit(1)
+        }
+      },
+    )
+
+  exdCmd
+    .command('export-strings')
+    .description('Export EXD string fields to a JSON file')
+    .argument('<output-dir>', 'Output directory for exported strings')
+    .option(
+      '-m, --mapping <mappings...>',
+      'Server:version mapping (e.g., "-m actoz:2024.01.02.0000.0000"). Version is optional and will use the latest version if not provided.',
+    )
+    .option(
+      '--saintcoinach <dir>',
+      'Directory containing SaintCoinach definitions',
+    )
+    .option('--exd-schema <dir>', 'Directory containing EXDSchema definitions')
+    .option(
+      '--root-only',
+      'Only export files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
+    .action(
+      async (
+        outputDir: string,
+        options: {
+          mapping?: string[]
+          saintcoinach?: string
+          rootOnly?: boolean
+          name?: string[]
+        },
+      ) => {
+        try {
+          // Get definition directory
+          const definitions = parseInputDefinitions(options.saintcoinach)
+
+          // Parse server versions
+          const serverVersions = parseServerVersions(options.mapping)
+
+          // Create filter
+          const { filter, description } = createExdFilter(
+            options.name,
+            options.rootOnly,
+          )
+
+          console.log(`📊 Exporting EXD strings${description}...`)
+          await exportExdStrings({
+            serverVersions,
+            outputDir,
+            definitions,
+            filter,
+          })
+        } catch (error) {
+          console.error('❌ String export failed:', error)
           process.exit(1)
         }
       },
