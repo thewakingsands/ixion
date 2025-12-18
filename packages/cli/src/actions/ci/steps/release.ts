@@ -119,7 +119,7 @@ async function createStringsArchive({
   try {
     await exportExdStrings({
       serverVersions,
-      outputDir: join(tempDir, 'sqpack/ffxiv'),
+      outputDir: tempDir,
       definitions: parseInputDefinitions(),
     })
 
