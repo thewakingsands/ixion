@@ -9,6 +9,7 @@ import {
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
 import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
+import { SingleBar } from 'cli-progress'
 import type { DefinitionProvider } from './schema/interface'
 import { getSaintcoinachType } from './schema/utils'
 import { formatSeString, parseSeString } from './sestring'
@@ -49,6 +50,11 @@ const csvName = (sheet: string, language?: Language) => {
 interface CSVExporterOptions {
   definitions: DefinitionProvider
   crlf?: boolean
+  /**
+   * Show a progress bar for sheets when exporting.
+   * Defaults to true.
+   */
+  showProgressBar?: boolean
 }
 
 const bom = Buffer.from([0xef, 0xbb, 0xbf])
@@ -142,46 +148,59 @@ export class CSVExporter {
       reader: primaryReader,
       languages: [primaryLanguage],
     } = readers[0]
-    const sheets = await listExdSheetsFromReader(primaryReader)
-    for (const sheet of sheets) {
-      if (filter && !filter(sheet)) {
-        continue
-      }
+    const sheets = await listExdSheetsFromReader(primaryReader, filter)
 
-      const primaryExh = await readExhHeaderFromReader(primaryReader, sheet)
-      const isNoneLanguage =
-        primaryExh.languages.length === 1 &&
-        primaryExh.languages[0] === Language.None
-      const hasStrings =
-        !isNoneLanguage &&
-        primaryExh.columns.some(
-          (column) => column.type === ExcelColumnDataType.String,
-        )
+    let progressBar: SingleBar | null = null
+    if (this.options.showProgressBar !== false && sheets.length > 0) {
+      progressBar = new SingleBar({
+        format: 'Sheets [{bar}] {value}/{total}',
+      })
+      progressBar.start(sheets.length, 0)
+    }
 
-      if (!hasStrings || format === ExdCSVFormat.Single) {
-        const csv = await this.exportSheet(
-          primaryReader,
-          sheet,
-          primaryExh,
-          isNoneLanguage ? Language.None : primaryLanguage,
-        )
-        this.writeFile(outputDir, sheet, Language.None, csv)
-      } else {
-        if (format === ExdCSVFormat.Multiple) {
-          for (let i = 0; i < readers.length; i++) {
-            const { reader, languages } = readers[i]
-            const exh =
-              i === 0
-                ? primaryExh
-                : await readExhHeaderFromReader(reader, sheet)
-            for (const language of languages) {
-              const csv = await this.exportSheet(reader, sheet, exh, language)
-              this.writeFile(outputDir, sheet, language, csv)
+    try {
+      for (const sheet of sheets) {
+        const primaryExh = await readExhHeaderFromReader(primaryReader, sheet)
+        const isNoneLanguage =
+          primaryExh.languages.length === 1 &&
+          primaryExh.languages[0] === Language.None
+        const hasStrings =
+          !isNoneLanguage &&
+          primaryExh.columns.some(
+            (column) => column.type === ExcelColumnDataType.String,
+          )
+
+        if (!hasStrings || format === ExdCSVFormat.Single) {
+          const csv = await this.exportSheet(
+            primaryReader,
+            sheet,
+            primaryExh,
+            isNoneLanguage ? Language.None : primaryLanguage,
+          )
+          this.writeFile(outputDir, sheet, Language.None, csv)
+        } else {
+          if (format === ExdCSVFormat.Multiple) {
+            for (let i = 0; i < readers.length; i++) {
+              const { reader, languages } = readers[i]
+              const exh =
+                i === 0
+                  ? primaryExh
+                  : await readExhHeaderFromReader(reader, sheet)
+              for (const language of languages) {
+                const csv = await this.exportSheet(reader, sheet, exh, language)
+                this.writeFile(outputDir, sheet, language, csv)
+              }
             }
           }
+
+          // Merged format is not implemented yet
         }
 
-        // Merged format is not implemented yet
+        progressBar?.increment()
+      }
+    } finally {
+      if (progressBar) {
+        progressBar.stop()
       }
     }
   }

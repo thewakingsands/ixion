@@ -6,6 +6,7 @@ import {
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
 import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
+import { SingleBar } from 'cli-progress'
 import type { DefinitionProvider } from './schema/interface'
 import { formatSeString, parseSeString } from './sestring'
 import {
@@ -20,6 +21,11 @@ import {
 
 interface StringsExporterOptions {
   definitions: DefinitionProvider
+  /**
+   * Show a progress bar for sheets when exporting.
+   * Defaults to true.
+   */
+  showProgressBar?: boolean
 }
 
 interface StringItem {
@@ -52,28 +58,39 @@ export class StringsExporter {
       }
     }
 
-    const sheets = await listExdSheetsFromReader(primaryReader)
-    for (const sheet of sheets) {
-      if (filter && !filter(sheet)) {
-        continue
+    const sheets = await listExdSheetsFromReader(primaryReader, filter)
+
+    let progressBar: SingleBar | null = null
+    if (this.options.showProgressBar !== false && sheets.length > 0) {
+      progressBar = new SingleBar({
+        format: 'Sheets [{bar}] {value}/{total}',
+      })
+      progressBar.start(sheets.length, 0)
+    }
+
+    try {
+      for (const sheet of sheets) {
+        const primaryExh = await readExhHeaderFromReader(primaryReader, sheet)
+        const isNoneLanguage =
+          primaryExh.languages.length === 1 &&
+          primaryExh.languages[0] === Language.None
+        const hasStrings =
+          !isNoneLanguage &&
+          primaryExh.columns.some(
+            (column) => column.type === ExcelColumnDataType.String,
+          )
+
+        if (!hasStrings) {
+          progressBar?.increment()
+          continue
+        }
+
+        const data = await this.exportSheet(readerMap, sheet, primaryExh)
+        this.writeFile(outputDir, sheet, data)
+        progressBar?.increment()
       }
-
-      const primaryExh = await readExhHeaderFromReader(primaryReader, sheet)
-      const isNoneLanguage =
-        primaryExh.languages.length === 1 &&
-        primaryExh.languages[0] === Language.None
-      const hasStrings =
-        !isNoneLanguage &&
-        primaryExh.columns.some(
-          (column) => column.type === ExcelColumnDataType.String,
-        )
-
-      if (!hasStrings) {
-        continue
-      }
-
-      const data = await this.exportSheet(readerMap, sheet, primaryExh)
-      this.writeFile(outputDir, sheet, data)
+    } finally {
+      progressBar?.stop()
     }
   }
 
@@ -110,10 +127,9 @@ export class StringsExporter {
         for (const id of stringMap[languageToCodeMap[language]].keys()) {
           idSet.add(id)
         }
-      } catch (error) {
+      } catch {
         console.error(
-          `Error reading sheet ${sheet} for language ${languageToCodeMap[language]}:`,
-          error,
+          `${sheet}: Failed reading language ${languageToCodeMap[language]}`,
         )
       }
     }

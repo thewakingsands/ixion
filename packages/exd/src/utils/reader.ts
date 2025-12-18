@@ -8,17 +8,27 @@ import {
 } from '@ffcafe/ixion-sqpack'
 import $debug from 'debug'
 import { rootExlFile } from '../const'
+import type { ExdFilter } from './filter'
 
 const debug = $debug('ixion:exd:utils')
 
-export async function listExdSheetsFromReader(reader: SqPackReader) {
+export async function listExdSheetsFromReader(
+  reader: SqPackReader,
+  filter?: ExdFilter,
+) {
   const root = await reader.readFile(rootExlFile)
   if (!root) {
     throw new Error(`Failed to read ${rootExlFile}`)
   }
 
   const rootData = readExlFile(root)
-  return rootData.entries.map((entry) => entry.name)
+  const sheets = rootData.entries.map((entry) => entry.name)
+
+  if (filter) {
+    return sheets.filter(filter)
+  }
+
+  return sheets
 }
 
 export async function readExhHeaderFromReader(

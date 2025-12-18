@@ -20,6 +20,7 @@
     "test": "vitest"
   },
   "devDependencies": {
+    "@types/cli-progress": "^3.11.6",
     "@types/debug": "catalog:",
     "config": "workspace:*",
     "tsup": "catalog:",
@@ -29,6 +30,7 @@
   "dependencies": {
     "@ffcafe/ixion-sqpack": "workspace:*",
     "@ffcafe/ixion-utils": "workspace:*",
+    "cli-progress": "^3.12.0",
     "debug": "catalog:",
     "yaml": "^2.8.1",
     "zod": "^4.1.12"

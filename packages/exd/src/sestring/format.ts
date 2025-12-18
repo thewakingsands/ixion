@@ -1,3 +1,4 @@
+import $debug from 'debug'
 import {
   type BinaryExpression,
   BinaryExpressionComparison,
@@ -9,6 +10,18 @@ import {
   type SeString,
 } from './interface'
 import { Type } from './type'
+
+const debug = $debug('ixion:exd:sestring:format')
+
+const unknownTagSet = new Set<number>()
+const reportUnknownTag = (tag: number) => {
+  if (unknownTagSet.has(tag)) {
+    return
+  }
+
+  unknownTagSet.add(tag)
+  debug('Unknown tag type %s: %s', tag, Type[tag])
+}
 
 export interface FormatOptions {
   debug?: boolean
@@ -309,7 +322,7 @@ export function formatSeString(
           break
         }
         default:
-          console.warn(`Unknown tag type ${payloadType} ${tagName}`)
+          reportUnknownTag(payloadType)
           if (!options.renderToText) {
             parts.push(
               formatHexValueTag(
