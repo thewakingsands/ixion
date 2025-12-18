@@ -1,4 +1,11 @@
-import type { ExhHeader } from '@ffcafe/ixion-sqpack'
+import {
+  EXDReader,
+  ExcelColumnDataType,
+  type ExhHeader,
+  getExdPath,
+  type SqPackReader,
+} from '@ffcafe/ixion-sqpack'
+import type { Language } from '@ffcafe/ixion-utils'
 
 /**
  * Validate that two EXH headers are compatible for merging
@@ -43,4 +50,54 @@ export function validateHeadersCompatible(
   }
 
   return true
+}
+
+export function getStringColumnIndexes(header: ExhHeader): number[] {
+  return header.columns
+    .map((column, index) =>
+      column.type === ExcelColumnDataType.String ? index : -1,
+    )
+    .filter((index) => index !== -1)
+}
+
+export async function readColumnsFromSheet(
+  reader: SqPackReader,
+  {
+    sheetName,
+    header,
+    language,
+    columnIndexes,
+  }: {
+    sheetName: string
+    header: ExhHeader
+    language: Language
+    columnIndexes: number[]
+  },
+): Promise<Map<string, any[]>> {
+  const dataMap = new Map<string, any[]>()
+
+  for (const { startId } of header.paginations) {
+    const data = await reader.readFile(getExdPath(sheetName, startId, language))
+    if (data) {
+      const reader = new EXDReader(data, header)
+      const rows = reader.readRows()
+      for (const row of rows) {
+        if (reader.isSubrows) {
+          for (const subRow of row.data) {
+            dataMap.set(
+              `${row.rowId}.${subRow.subRowId}`,
+              columnIndexes.map((column) => subRow.data[column]),
+            )
+          }
+        } else {
+          dataMap.set(
+            row.rowId.toString(),
+            columnIndexes.map((column) => row.data[column]),
+          )
+        }
+      }
+    }
+  }
+
+  return dataMap
 }

@@ -1,11 +1,15 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { rootExlFile, validateHeadersCompatible } from '@ffcafe/ixion-exd'
+import {
+  getStringColumnIndexes,
+  readColumnsFromSheet,
+  rootExlFile,
+  validateHeadersCompatible,
+} from '@ffcafe/ixion-exd'
 import { servers } from '@ffcafe/ixion-server'
 import {
   EXDReader,
   EXDWriter,
-  ExcelColumnDataType,
   type ExhHeader,
   type ExlFile,
   getExdPath,
@@ -337,16 +341,10 @@ class ExdBuilder {
     baseSheetInfo: SheetInfo,
     stringSheetInfo: SheetInfo,
   ) {
-    const baseStringColumns = baseSheetInfo.exhHeader.columns
-      .map((column, index) =>
-        column.type === ExcelColumnDataType.String ? index : -1,
-      )
-      .filter((index) => index !== -1)
-    const stringStringColumns = stringSheetInfo.exhHeader.columns
-      .map((column, index) =>
-        column.type === ExcelColumnDataType.String ? index : -1,
-      )
-      .filter((index) => index !== -1)
+    const baseStringColumns = getStringColumnIndexes(baseSheetInfo.exhHeader)
+    const stringStringColumns = getStringColumnIndexes(
+      stringSheetInfo.exhHeader,
+    )
 
     if (baseStringColumns.length !== stringStringColumns.length) {
       throw new Error(
@@ -372,33 +370,12 @@ class ExdBuilder {
     }
 
     for (const language of stringSheetInfo.languages) {
-      const stringMap = new Map<string, string[]>()
-
-      // read strings
-      for (const { startId } of stringSheetInfo.exhHeader.paginations) {
-        const data = await stringSheetInfo.reader.readFile(
-          getExdPath(sheetName, startId, language),
-        )
-        if (data) {
-          const reader = new EXDReader(data, stringSheetInfo.exhHeader)
-          const rows = reader.readRows()
-          for (const row of rows) {
-            if (reader.isSubrows) {
-              for (const subRow of row.data) {
-                stringMap.set(
-                  `${row.rowId}.${subRow.subRowId}`,
-                  stringStringColumns.map((column) => subRow.data[column]),
-                )
-              }
-            } else {
-              stringMap.set(
-                row.rowId.toString(),
-                stringStringColumns.map((column) => row.data[column]),
-              )
-            }
-          }
-        }
-      }
+      const stringMap = await readColumnsFromSheet(stringSheetInfo.reader, {
+        sheetName,
+        header: stringSheetInfo.exhHeader,
+        language,
+        columnIndexes: stringStringColumns,
+      })
 
       // merge base sheet pages
       for (const page of baseSheetPages) {
