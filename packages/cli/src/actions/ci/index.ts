@@ -3,7 +3,13 @@ import { createConfigFromTemplate } from './init'
 import { createRelease } from './steps/release'
 import { checkAndUpdateVersions } from './steps/update'
 
-export const ciUpdateCommand = async (skipUpdate = false) => {
+export const ciUpdateCommand = async ({
+  skipUpdate = false,
+  forceRelease = false,
+}: {
+  skipUpdate?: boolean
+  forceRelease?: boolean
+}) => {
   try {
     console.log('🔍 Running CI actions...')
 
@@ -17,7 +23,7 @@ export const ciUpdateCommand = async (skipUpdate = false) => {
     )
 
     // Step 3: Check if versions changed and create releases
-    await createRelease(currentVersions)
+    await createRelease(currentVersions, forceRelease)
 
     console.log('\n✅ CI actions completed successfully')
   } catch (error) {

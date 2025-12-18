@@ -13,8 +13,12 @@ export const registerCiCommand = (program: Command) => {
     .command('update')
     .description('Update game to the latest version')
     .option('-s, --skip-update', 'Skip update')
-    .action(async (options: { skipUpdate: boolean }) => {
-      return ciUpdateCommand(options.skipUpdate)
+    .option('-f, --force-release', 'Force release')
+    .action(async (options: { skipUpdate: boolean; forceRelease: boolean }) => {
+      return ciUpdateCommand({
+        skipUpdate: options.skipUpdate,
+        forceRelease: options.forceRelease,
+      })
     })
 
   return ciCmd

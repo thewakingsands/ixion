@@ -134,6 +134,7 @@ async function createStringsArchive({
 
 export async function createRelease(
   currentVersions: Record<string, string>,
+  forceRelease = false,
 ): Promise<void> {
   const releasedVersions = readReleasedVersions()
   let updated = false
@@ -148,7 +149,7 @@ export async function createRelease(
     }
   }
 
-  if (!updated) {
+  if (!updated && !forceRelease) {
     console.log('\n✅ All versions are up to date, no release needed')
     return
   }
