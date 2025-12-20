@@ -10,6 +10,10 @@ on:
         description: "Skip update step"
         default: false
         type: boolean
+      force_release:
+        description: "Force release"
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -48,9 +52,10 @@ jobs:
           MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
           MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+          FORCE_RELEASE: ${{ inputs.force_release && '--force-release' || '' }}
         run: |
           node packages/cli/dist/index.js ci init
-          node packages/cli/dist/index.js ci update
+          node packages/cli/dist/index.js ci update ${{ env.FORCE_RELEASE }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
