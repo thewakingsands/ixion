@@ -124,7 +124,18 @@ export class StringsExporter {
 
     const languages = Object.keys(stringMap)
 
-    for (const rowId of idSet) {
+    const idList = Array.from(idSet)
+    idList.sort((a, b) => {
+      if (a.includes('.')) {
+        const [a1, a2] = a.split('.').map(Number)
+        const [b1, b2] = b.split('.').map(Number)
+        return a1 - b1 || a2 - b2
+      }
+
+      return Number(a) - Number(b)
+    })
+
+    for (const rowId of idList) {
       const record: Record<string, string[]> = {}
 
       for (const language of languages) {
