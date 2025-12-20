@@ -1,13 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import {
-  ExcelColumnDataType,
-  type ExhHeader,
-  type SqPackReader,
-} from '@ffcafe/ixion-sqpack'
+import { ExcelColumnDataType, type SqPackReader } from '@ffcafe/ixion-sqpack'
 import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
-import type { DefinitionProvider } from './schema/interface'
 import { formatSeString, parseSeString } from './sestring'
 import {
   type ExdFilter,
@@ -20,7 +15,7 @@ import {
 } from './utils/reader'
 
 interface StringsExporterOptions {
-  definitions: DefinitionProvider
+  outputDir: string
   /**
    * Show a progress bar for sheets when exporting.
    * Defaults to true.
@@ -31,19 +26,19 @@ interface StringsExporterOptions {
 interface StringItem {
   sheet: string
   rowId: string
-  field: string
   values: Record<string, string>
 }
 
 export class StringsExporter {
-  private readonly definitions: DefinitionProvider
-  constructor(readonly options: StringsExporterOptions) {
-    this.definitions = options.definitions
-  }
+  private outputIndex = 0
+  private rowCount = 0
+  private buffer: StringItem[] = []
+  private bufferSize = 10000
+
+  constructor(readonly options: StringsExporterOptions) {}
 
   async export(
     readers: Array<{ languages: Language[]; reader: SqPackReader }>,
-    outputDir: string,
     filter?: ExdFilter,
   ) {
     if (readers.length === 0) {
@@ -85,35 +80,28 @@ export class StringsExporter {
           continue
         }
 
-        const data = await this.exportSheet(readerMap, sheet, primaryExh)
-        this.writeFile(outputDir, sheet, data)
+        await this.exportSheet(readerMap, sheet)
         progressBar?.increment()
       }
+
+      this.flush()
     } finally {
       progressBar?.stop()
+      console.log(`Exported ${this.rowCount} rows`)
     }
   }
 
-  async exportSheet(
-    readers: Map<Language, SqPackReader>,
-    sheet: string,
-    exdHeader: ExhHeader,
-  ) {
-    const definitions = await this.definitions.getFlatFields(
-      sheet,
-      exdHeader.columns,
-    )
-    const stringFields = getStringColumnIndexes(exdHeader).map(
-      (index) => definitions[index]?.name || `${index}`,
-    )
-
+  async exportSheet(readers: Map<Language, SqPackReader>, sheet: string) {
     // collect all strings
+    let columnCount = 0
     const stringMap: Record<string, Map<string, any[]>> = {}
     const idSet = new Set<string>()
     for (const [language, reader] of readers.entries()) {
       try {
         const header = await readExhHeaderFromReader(reader, sheet)
         const columnIndexes = getStringColumnIndexes(header)
+        columnCount = Math.max(columnCount, columnIndexes.length)
+
         stringMap[languageToCodeMap[language]] = await readColumnsFromSheet(
           reader,
           {
@@ -134,34 +122,41 @@ export class StringsExporter {
       }
     }
 
-    const data: StringItem[] = []
     const languages = Object.keys(stringMap)
 
-    for (let i = 0; i < stringFields.length; i++) {
-      const field = stringFields[i]
+    for (const rowId of idSet) {
+      const record: Record<string, string[]> = {}
 
-      for (const id of idSet) {
-        const stringItem: StringItem = {
-          sheet,
-          rowId: id,
-          field: field,
-          values: {},
-        }
-
-        for (const language of languages) {
-          const strings = stringMap[language].get(id)
-          if (strings) {
-            stringItem.values[language] = this.formatString(strings[i])
-          }
-        }
-
-        if (this.itemFilter(stringItem)) {
-          data.push(stringItem)
+      for (const language of languages) {
+        const strings = stringMap[language].get(rowId)
+        if (strings) {
+          record[language] = strings.map(this.formatString)
         }
       }
-    }
 
-    return data
+      const values = this.formatValues(record, columnCount)
+      if (values) {
+        this.add({ sheet, rowId, values })
+      }
+    }
+  }
+
+  add(item: StringItem) {
+    this.buffer.push(item)
+    if (this.buffer.length >= this.bufferSize) {
+      this.flush()
+    }
+  }
+
+  flush() {
+    this.rowCount += this.buffer.length
+    this.writeFile(
+      this.options.outputDir,
+      `strings-${this.outputIndex.toString().padStart(4, '0')}`,
+      this.buffer,
+    )
+    this.buffer = []
+    this.outputIndex++
   }
 
   writeFile(dir: string, sheet: string, data: StringItem[]) {
@@ -189,16 +184,31 @@ export class StringsExporter {
     }
   }
 
-  private itemFilter(item: StringItem): boolean {
-    const values = Object.values(item.values)
-    if (values.length === 0 || values.every((value) => value === '')) {
-      return false
+  private formatValues(
+    record: Record<string, string[]>,
+    columnCount: number,
+  ): Record<string, string> | null {
+    const languages = Object.keys(record)
+    if (languages.length === 0) {
+      return null
     }
 
-    if (values.length > 1 && values.every((value) => value === values[0])) {
-      return false
+    let hasValue = false
+    const formattedValues: Record<string, string> = {}
+    for (let i = 0; i < columnCount; i++) {
+      const values = languages.map((language) => record[language][i])
+      if (values.every((value) => value === values[0])) {
+        continue
+      }
+
+      hasValue = true
+      for (let j = 0; j < languages.length; j++) {
+        if (typeof values[j] === 'string') {
+          formattedValues[languages[j]] = values[j]
+        }
+      }
     }
 
-    return true
+    return hasValue ? formattedValues : null
   }
 }

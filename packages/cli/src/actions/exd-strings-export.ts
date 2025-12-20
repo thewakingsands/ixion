@@ -1,22 +1,20 @@
 import { mkdir } from 'node:fs/promises'
-import { type DefinitionProvider, StringsExporter } from '@ffcafe/ixion-exd'
+import { StringsExporter } from '@ffcafe/ixion-exd'
 import { ExdBase, type ServerVersion } from './exd-base'
 
 export async function exportExdStrings({
   serverVersions,
   outputDir,
-  definitions,
   filter,
 }: {
   serverVersions: ServerVersion[]
   outputDir: string
-  definitions: DefinitionProvider
   filter?: (path: string) => boolean
 }) {
   const exdBase = new ExdBase(serverVersions)
   try {
     const stringsExporter = new StringsExporter({
-      definitions,
+      outputDir,
     })
 
     console.log(`🔍 Downloading EXD files...`)
@@ -26,7 +24,7 @@ export async function exportExdStrings({
     await mkdir(outputDir, { recursive: true })
 
     console.log(`🔍 Exporting strings...`)
-    await stringsExporter.export(exdBase.readers, outputDir, filter)
+    await stringsExporter.export(exdBase.readers, filter)
 
     console.log(`✅ String export completed`)
   } finally {

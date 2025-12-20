@@ -435,11 +435,6 @@ export function registerExdCommand(program: Command) {
       'Server:version mapping (e.g., "-m actoz:2024.01.02.0000.0000"). Version is optional and will use the latest version if not provided.',
     )
     .option(
-      '--saintcoinach <dir>',
-      'Directory containing SaintCoinach definitions',
-    )
-    .option('--exd-schema <dir>', 'Directory containing EXDSchema definitions')
-    .option(
       '--root-only',
       'Only export files in the exd/ directory, ignore subdirectories',
     )
@@ -452,15 +447,11 @@ export function registerExdCommand(program: Command) {
         outputDir: string,
         options: {
           mapping?: string[]
-          saintcoinach?: string
           rootOnly?: boolean
           name?: string[]
         },
       ) => {
         try {
-          // Get definition directory
-          const definitions = parseInputDefinitions(options.saintcoinach)
-
           // Parse server versions
           const serverVersions = parseServerVersions(options.mapping)
 
@@ -474,7 +465,6 @@ export function registerExdCommand(program: Command) {
           await exportExdStrings({
             serverVersions,
             outputDir,
-            definitions,
             filter,
           })
         } catch (error) {

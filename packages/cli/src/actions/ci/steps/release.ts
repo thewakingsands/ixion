@@ -120,7 +120,6 @@ async function createStringsArchive({
     await exportExdStrings({
       serverVersions,
       outputDir: tempDir,
-      definitions: parseInputDefinitions(),
     })
 
     await compressDirectoryToFile(tempDir, outputPath)
