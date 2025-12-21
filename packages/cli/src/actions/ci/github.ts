@@ -10,7 +10,6 @@ import {
   ciGitUserName,
   ciVersionMessage,
   ciVersionsPath,
-  mergedVersionServer,
 } from './constants'
 import type { Archive } from './interface'
 import { writeReleasedVersions } from './version'
@@ -62,19 +61,19 @@ export async function createGitHubRelease(
   // Write versions to file and commit
   writeReleasedVersions(versions)
 
-  const hash = await commitAndPush(ciVersionsPath, ciVersionMessage)
+  const commitHash = await commitAndPush(ciVersionsPath, ciVersionMessage)
   const date = new Date().toISOString().replace(/[-:]/g, '').split('T')[0]
-  const name = `${date}-${hash.slice(0, 7)}`
-
-  // calc sha256sum of merged archive
-  const mergedArchive = archives.find(
-    ({ server }) => server === mergedVersionServer,
-  )
-  const sha256sum = mergedArchive
-    ? calculateHashForFile(mergedArchive.path, 'sha256') || ''
-    : ''
+  const name = `${date}-${commitHash.slice(0, 7)}`
 
   // Create release
+  const assets = [...archives.map(({ path }) => path), ...extraAssets].map(
+    (path) => ({
+      name: basename(path),
+      path,
+      sha256: calculateHashForFile(path, 'sha256'),
+    }),
+  )
+
   const release = await octokit.repos.createRelease({
     owner,
     repo,
@@ -87,7 +86,11 @@ export async function createGitHubRelease(
         ({ server, version, hash }) =>
           `| ${kebabCase(server)} | ${version} | ${hash?.exe?.slice(0, 8) || '-'} | ${hash?.excel?.slice(0, 8) || '-'} |`,
       ),
-      `\nsha256sum of merged archive:\n\`\`\`\n${sha256sum}\n\`\`\``,
+      '----',
+      'sha256sum of assets:',
+      '| File | SHA256 |',
+      '| ------ | ------- |',
+      ...assets.map(({ name, sha256 }) => `| ${name} | ${sha256} |`),
     ].join('\n'),
     draft: false,
     prerelease: false,
@@ -96,19 +99,17 @@ export async function createGitHubRelease(
   console.log(`✅ Created GitHub release: ${name}`)
 
   // Upload assets
-  const assets = [...archives.map(({ path }) => path), ...extraAssets]
-  for (const path of assets) {
-    const archiveName = basename(path)
+  for (const { name, path } of assets) {
     const fileData = readFileSync(path)
     await octokit.repos.uploadReleaseAsset({
       owner,
       repo,
       release_id: release.data.id,
-      name: archiveName,
+      name,
       data: fileData as unknown as string,
     })
 
-    console.log(`✅ Uploaded ${archiveName} to release`)
+    console.log(`✅ Uploaded ${name} to release`)
   }
 }
 
