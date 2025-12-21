@@ -32,6 +32,14 @@ export async function commitAndPush(
 ): Promise<string> {
   await configGit()
 
+  // Check if there are changes to commit before proceeding
+  const status = await $`git status --porcelain ${path}`
+  if (!status.stdout.trim()) {
+    // No changes, skip commit and push, return current HEAD
+    const hash = await $`git rev-parse HEAD`
+    return hash.stdout.trim()
+  }
+
   await $`git pull`
   await $`git add ${path}`
   await $`git commit -m ${message}`
