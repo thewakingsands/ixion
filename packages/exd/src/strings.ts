@@ -205,21 +205,37 @@ export class StringsExporter {
     }
 
     let hasValue = false
-    const formattedValues: Record<string, string> = {}
+    const filteredRecord: Record<string, string[]> = {}
+    for (const language of languages) {
+      filteredRecord[language] = []
+    }
+
     for (let i = 0; i < columnCount; i++) {
       const values = languages.map((language) => record[language][i])
-      if (values.every((value) => value === values[0])) {
+      if (
+        (values.length === 1 && !values[0]) ||
+        (values.length > 1 && values.every((value) => value === values[0]))
+      ) {
         continue
       }
 
       hasValue = true
       for (let j = 0; j < languages.length; j++) {
         if (typeof values[j] === 'string') {
-          formattedValues[languages[j]] = values[j]
+          filteredRecord[languages[j]].push(values[j])
         }
       }
     }
 
-    return hasValue ? formattedValues : null
+    if (!hasValue) {
+      return null
+    }
+
+    const formattedValues: Record<string, string> = {}
+    for (const language of languages) {
+      formattedValues[language] = filteredRecord[language].join('\n')
+    }
+
+    return formattedValues
   }
 }
