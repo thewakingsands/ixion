@@ -132,6 +132,14 @@ export const updateCommand = async (
 
     for (let i = 0; i < ffxivPatches.length; i++) {
       const patch = ffxivPatches[i]
+      if (await storageManager.hasVersion(options.server, patch.version)) {
+        // Update the current version
+        version = patch.version
+
+        console.log(`✅ Patch ${patch.version} already exists`)
+        continue
+      }
+
       console.log(
         `\n[${i + 1}/${ffxivPatches.length}] Processing patch: ${patch.version}`,
       )
