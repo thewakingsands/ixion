@@ -4,6 +4,12 @@ import type { AbstractStorage, StorageConfig, VersionData } from './abstract'
 import { LocalStorage } from './adapter/local'
 import { MinioStorage } from './adapter/minio'
 
+export interface SyncSummary {
+  synced: string[]
+  skipped: string[]
+  errors: string[]
+}
+
 export class StorageManager {
   private storages: Map<string, AbstractStorage> = new Map()
 
@@ -275,7 +281,7 @@ export class StorageManager {
     target: string
     override?: boolean
     versionFilter?: (version: string) => boolean
-  }): Promise<{ synced: string[]; skipped: string[]; errors: string[] }> {
+  }): Promise<SyncSummary> {
     const sourceStorage = this.storages.get(source)
     const targetStorage = this.storages.get(target)
 
@@ -368,15 +374,8 @@ export class StorageManager {
   /**
    * Sync all versions between all storages (bidirectional)
    */
-  async syncAllVersions(
-    server: string,
-  ): Promise<
-    Record<string, { synced: string[]; skipped: string[]; errors: string[] }>
-  > {
-    const results: Record<
-      string,
-      { synced: string[]; skipped: string[]; errors: string[] }
-    > = {}
+  async syncAllVersions(server: string): Promise<Record<string, SyncSummary>> {
+    const results: Record<string, SyncSummary> = {}
     const storageNames = Array.from(this.storages.keys())
 
     for (let i = 0; i < storageNames.length; i++) {
