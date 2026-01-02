@@ -4,7 +4,6 @@ import { createActionAuth } from '@octokit/auth-action'
 import { Octokit } from '@octokit/rest'
 import { $ } from 'execa'
 import { kebabCase } from '../../utils/case'
-import { calculateHashForFile } from '../../utils/hash'
 import {
   ciGitUserEmail,
   ciGitUserName,
@@ -78,7 +77,6 @@ export async function createGitHubRelease(
     (path) => ({
       name: basename(path),
       path,
-      sha256: calculateHashForFile(path, 'sha256'),
     }),
   )
 
@@ -94,11 +92,6 @@ export async function createGitHubRelease(
         ({ server, version, hash }) =>
           `| ${kebabCase(server)} | ${version} | ${hash?.exe?.slice(0, 8) || '-'} | ${hash?.excel?.slice(0, 8) || '-'} |`,
       ),
-      '----',
-      'sha256sum of assets:',
-      '| File | SHA256 |',
-      '| ------ | ------- |',
-      ...assets.map(({ name, sha256 }) => `| ${name} | ${sha256} |`),
     ].join('\n'),
     draft: false,
     prerelease: false,
