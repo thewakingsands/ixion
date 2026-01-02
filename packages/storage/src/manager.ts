@@ -295,10 +295,17 @@ export class StorageManager {
       // Get all versions from source storage
       const sourceVersions = await sourceStorage.listVersions(server)
 
-      // Filter versions if filter function provided
-      const versionsToSync = versionFilter
-        ? sourceVersions.filter(versionFilter)
-        : sourceVersions
+      // Get all versions from target storage
+      const targetVersions = await targetStorage.listVersions(server)
+
+      // Get the versions that are in source but not in target
+      const versionsToSync = sourceVersions.filter((version) => {
+        if (targetVersions.includes(version)) {
+          return false
+        }
+
+        return versionFilter ? versionFilter(version) : true
+      })
 
       console.log(
         `📋 Found ${versionsToSync.length} versions to sync from ${source} to ${target}`,
