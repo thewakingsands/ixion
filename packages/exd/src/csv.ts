@@ -171,13 +171,17 @@ export class CSVExporter {
           )
 
         if (!hasStrings || format === ExdCSVFormat.Single) {
-          const csv = await this.exportSheet(
-            primaryReader,
-            sheet,
-            primaryExh,
-            isNoneLanguage ? Language.None : primaryLanguage,
-          )
-          this.writeFile(outputDir, sheet, Language.None, csv)
+          try {
+            const csv = await this.exportSheet(
+              primaryReader,
+              sheet,
+              primaryExh,
+              isNoneLanguage ? Language.None : primaryLanguage,
+            )
+            this.writeFile(outputDir, sheet, Language.None, csv)
+          } catch (error) {
+            console.warn(`\nFailed exporting ${sheet}`, error)
+          }
         } else {
           if (format === ExdCSVFormat.Multiple) {
             for (let i = 0; i < readers.length; i++) {
@@ -187,8 +191,20 @@ export class CSVExporter {
                   ? primaryExh
                   : await readExhHeaderFromReader(reader, sheet)
               for (const language of languages) {
-                const csv = await this.exportSheet(reader, sheet, exh, language)
-                this.writeFile(outputDir, sheet, language, csv)
+                try {
+                  const csv = await this.exportSheet(
+                    reader,
+                    sheet,
+                    exh,
+                    language,
+                  )
+                  this.writeFile(outputDir, sheet, language, csv)
+                } catch (error) {
+                  console.warn(
+                    `\nFailed exporting ${sheet}:lang=${language}`,
+                    error,
+                  )
+                }
               }
             }
           }
