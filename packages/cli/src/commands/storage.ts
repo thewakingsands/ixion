@@ -76,19 +76,14 @@ export const registerStorageCommand = (program: Command) => {
         if (options.allServers) {
           // List versions for all servers
           const serverKeys = Object.keys(servers)
-          console.log('📋 Available versions across all servers:')
+          console.log('📋 Latest versions across all servers:')
 
           for (const server of serverKeys) {
             try {
-              const versions = await storageManager.listVersions(server)
-              if (versions.length > 0) {
-                console.log(`\n${server}:`)
-                versions.forEach((version) => {
-                  console.log(`  - ${version}`)
-                })
-              }
+              const version = await storageManager.getLatestVersion(server)
+              console.log(`${server}: ${version}`)
             } catch (error) {
-              console.log(`\n${server}: (error: ${error})`)
+              console.log(`${server}: (error: ${error})`)
             }
           }
         } else {
