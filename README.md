@@ -23,12 +23,24 @@ nr x record -s squareEnix C:\\path\\to\\game
 # Update game to latest version
 nr x update -s squareEnix
 
+# Sync versions between storages
+nr x storage sync -a
+
+# List all available versions across all storages
+nr x storage versions -a
+
 # Build a merged sqpack file of EXD files
 # writes outputs/7.25/merged.{dat0,index,index2}
 nr x exd build --root-only \
   -m sdo:2025.07.28.0000.0000 \
   -m squareEnix:2025.05.17.0000.0000 \
   outputs/7.25 -p merged
+
+# Export EXDs to CSV
+nr x exd export-csv \
+  -m sdo:2025.07.28.0000.0000 \
+  -m squareEnix:2025.05.17.0000.0000 \
+  outputs/7.25
 ```
 
 ## LICENSE
