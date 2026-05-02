@@ -86,11 +86,11 @@ export async function createGitHubRelease(
     tag_name: `publish/${name}`,
     name,
     body: [
-      '| Server | Version | exeHash | 0aHash |',
-      '| ------ | ------- | ------- | ------ |',
+      '| Server | Version | Trunk | exeHash | 0aHash |',
+      '| ------ | ------- | ----- | ------- | ------ |',
       ...archives.map(
-        ({ server, version, hash }) =>
-          `| ${kebabCase(server)} | ${version} | ${hash?.exe?.slice(0, 8) || '-'} | ${hash?.excel?.slice(0, 8) || '-'} |`,
+        ({ server, version, trunk, hash }) =>
+          `| ${kebabCase(server)} | ${version} | ${trunk || '-'} | ${hash?.exe?.slice(0, 8) || '-'} | ${hash?.excel?.slice(0, 8) || '-'} |`,
       ),
     ].join('\n'),
     draft: false,

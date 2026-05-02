@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import type { StorageManager } from '@ffcafe/ixion-storage'
 import { ZipatchReader } from '@ffcafe/ixion-zipatch'
 import { baseGameVersion, exdSqPackFile, files } from '../config'
-import { readGameVersion } from '../utils/game'
+import { readGameTrunk, readGameVersion } from '../utils/game'
 import { getTempDir } from '../utils/root'
 import { getServerLanguages } from '../utils/server'
 import { getStorageManager } from '../utils/storage'
@@ -124,6 +124,9 @@ export async function createVersionFromGame(
 
   console.log(`🎮 Recording game version: ${version}`)
   console.log(`📁 Game path: ${gamePath}`)
+
+  const trunk = readGameTrunk(gamePath)
+  console.log(`🚀 Game trunk: ${trunk}\n`)
 
   // Get storage manager
   let storageManager = getStorageManager()

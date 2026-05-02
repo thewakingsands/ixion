@@ -10,8 +10,8 @@ import { createExdFilter } from '@ffcafe/ixion-exd'
 import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
 import { exdSqPackFile, files } from '../../../config'
 import { kebabCase } from '../../../utils/case'
+import { readGameTrunk } from '../../../utils/game'
 import { calculateHashForArchive } from '../../../utils/hash'
-import { parseInputDefinitions } from '../../../utils/input'
 import { getTempDir, getWorkingDir } from '../../../utils/root'
 import { getStorageManager } from '../../../utils/storage'
 import type { ServerVersion } from '../../exd-base'
@@ -59,7 +59,10 @@ async function createServerArchive({
     }
 
     await compressDirectoryToFile(tempDir, outputPath)
-    return calculateHashForArchive(tempDir)
+    return {
+      hash: calculateHashForArchive(tempDir),
+      trunk: readGameTrunk(tempDir),
+    }
   } finally {
     // Clean up temporary directory
     console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
@@ -173,7 +176,7 @@ export async function createRelease(
     const { server, version } = item
     console.log(`📂 Creating archive for ${server}: ${version}`)
     const path = join(archiveDir, `${kebabCase(server)}-${version}.zip`)
-    const hash = await createServerArchive({
+    const result = await createServerArchive({
       server,
       version,
       outputPath: path,
@@ -185,7 +188,8 @@ export async function createRelease(
       version,
       sqpackPrefix: join(sqpackPath, server, basename(exdSqPackFile)),
       path,
-      hash,
+      hash: result.hash,
+      trunk: result.trunk,
     })
   }
 
