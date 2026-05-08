@@ -6,7 +6,7 @@ import { languageToCodeMap } from '@ffcafe/ixion-utils'
 import type { Command } from 'commander'
 import { parseServerVersions } from '../actions/exd-base'
 import { buildExdFiles } from '../actions/exd-build'
-import { exportExdFilesToCSV } from '../actions/exd-csv-export'
+import { exportAllRawExd, exportExdFilesToCSV } from '../actions/exd-csv-export'
 import { extractExdFiles } from '../actions/exd-extract'
 import { readExdFileList } from '../actions/exd-list'
 import { exportExdStrings } from '../actions/exd-strings-export'
@@ -421,6 +421,67 @@ export function registerExdCommand(program: Command) {
           })
         } catch (error) {
           console.error('❌ CSV export failed:', error)
+          process.exit(1)
+        }
+      },
+    )
+
+  exdCmd
+    .command('export-allrawexd')
+    .description('Export EXD string fields to a JSON file')
+    .argument('<output-dir>', 'Output directory for exported strings')
+    .option(
+      '-m, --mapping <mappings...>',
+      'Server:version mapping (e.g., "-m actoz:2024.01.02.0000.0000"). Version is optional and will use the latest version if not provided.',
+    )
+    .option(
+      '--saintcoinach <dir>',
+      'Directory containing SaintCoinach definitions',
+    )
+    .option('--exd-schema <dir>', 'Directory containing EXDSchema definitions')
+    .option('--crlf', 'Use CRLF line endings instead of LF', false)
+    .option(
+      '--root-only',
+      'Only export files in the exd/ directory, ignore subdirectories',
+    )
+    .option(
+      '-n, --name <keywords...>',
+      'Filter files by name keywords (case-insensitive)',
+    )
+    .action(
+      async (
+        outputDir: string,
+        options: {
+          mapping?: string[]
+          saintcoinach?: string
+          rootOnly?: boolean
+          name?: string[]
+          crlf?: boolean
+        },
+      ) => {
+        try {
+          // Get definition directory
+          const definitions = parseInputDefinitions(options.saintcoinach)
+
+          // Parse server versions
+          const serverVersions = parseServerVersions(options.mapping)
+
+          // Create filter
+          const { filter, description } = createExdFilter(
+            options.name,
+            options.rootOnly,
+          )
+
+          console.log(`📊 Exporting EXD strings${description}...`)
+          await exportAllRawExd({
+            definitions,
+            crlf: options.crlf || false,
+            serverVersions,
+            outputDir,
+            filter,
+          })
+        } catch (error) {
+          console.error('❌ String export failed:', error)
           process.exit(1)
         }
       },

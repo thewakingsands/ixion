@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   CSVExporter,
   type DefinitionProvider,
-  type ExdCSVFormat,
+  ExdCSVFormat,
 } from '@ffcafe/ixion-exd'
 import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import type { Language } from '@ffcafe/ixion-utils'
@@ -12,6 +12,7 @@ import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
 import { isGitHubActions, writeGithubOutput } from './ci/github'
+import { ExdBase, type ServerVersion } from './exd-base'
 
 export async function exportExdFilesToCSV({
   server,
@@ -67,5 +68,45 @@ export async function exportExdFilesToCSV({
   } finally {
     // Clean up temporary directory
     rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+export async function exportAllRawExd({
+  definitions,
+  crlf,
+  serverVersions,
+  outputDir,
+  filter,
+}: {
+  definitions: DefinitionProvider
+  crlf: boolean
+  serverVersions: ServerVersion[]
+  outputDir: string
+  filter?: (path: string) => boolean
+}) {
+  const exdBase = new ExdBase(serverVersions)
+  try {
+    const csvExporter = new CSVExporter({
+      definitions,
+      crlf,
+    })
+
+    console.log(`🔍 Downloading EXD files...`)
+    await exdBase.prepareReaders()
+
+    // Ensure output directory exists
+    await mkdir(outputDir, { recursive: true })
+
+    console.log(`🔍 Exporting allrawexd...`)
+    await csvExporter.export(
+      exdBase.readers,
+      ExdCSVFormat.Multiple,
+      outputDir,
+      filter,
+    )
+
+    console.log(`✅ allrawexd export completed`)
+  } finally {
+    await exdBase.close()
   }
 }
