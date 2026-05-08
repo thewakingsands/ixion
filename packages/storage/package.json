@@ -27,6 +27,6 @@
   },
   "dependencies": {
     "@ffcafe/ixion-utils": "workspace:*",
-    "minio": "^8.0.5"
+    "minio": "^8.0.7"
   }
 }
