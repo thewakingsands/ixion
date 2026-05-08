@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs'
-import { type FileHandle, mkdir, open, rmdir } from 'node:fs/promises'
+import { type FileHandle, mkdir, open, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import $debug from 'debug'
 
@@ -106,7 +106,7 @@ export class FileSystem {
   async removeDirectory(path: string): Promise<void> {
     const fullPath = join(this.root, path)
     debug('rmdir %s', fullPath)
-    await rmdir(fullPath, { recursive: true })
+    await rm(fullPath, { recursive: true })
   }
 
   /**
