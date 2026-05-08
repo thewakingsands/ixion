@@ -12,10 +12,12 @@ import { exdSqPackFile, files } from '../../../config'
 import { kebabCase } from '../../../utils/case'
 import { readGameTrunk } from '../../../utils/game'
 import { calculateHashForArchive } from '../../../utils/hash'
+import { parseInputDefinitions } from '../../../utils/input'
 import { getTempDir, getWorkingDir } from '../../../utils/root'
 import { getStorageManager } from '../../../utils/storage'
 import type { ServerVersion } from '../../exd-base'
 import { buildExdFiles } from '../../exd-build'
+import { exportAllRawExd } from '../../exd-csv-export'
 import { exportExdStrings } from '../../exd-strings-export'
 import {
   mergedVersionReference,
@@ -134,6 +136,36 @@ async function createStringsArchive({
   }
 }
 
+async function createAllRawExdArchive({
+  serverVersions,
+  outputPath,
+}: {
+  serverVersions: ServerVersion[]
+  outputPath: string
+}): Promise<string> {
+  const tempDir = await getTempDir()
+  console.log(`📂 Created temporary directory: ${tempDir}`)
+
+  try {
+    const definitions = parseInputDefinitions()
+    const { filter } = createExdFilter(undefined, true)
+    await exportAllRawExd({
+      definitions,
+      crlf: false,
+      serverVersions,
+      outputDir: tempDir,
+      filter,
+    })
+
+    await compressDirectoryToFile(tempDir, outputPath)
+    return outputPath
+  } finally {
+    // Clean up temporary directory
+    console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 export async function createRelease(
   currentVersions: Record<string, string>,
   forceRelease = false,
@@ -220,6 +252,10 @@ export async function createRelease(
     await createStringsArchive({
       serverVersions: serverArchives,
       outputPath: join(archiveDir, 'strings.zip'),
+    }),
+    await createAllRawExdArchive({
+      serverVersions: serverArchives,
+      outputPath: join(archiveDir, 'allrawexd.zip'),
     }),
   ]
 
