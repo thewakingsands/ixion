@@ -5,7 +5,7 @@ const DataBase = z.object({
 })
 
 export const SingleData = DataBase.extend({
-  type: z.literal(undefined),
+  type: z.undefined().optional(),
   name: z.string(),
   converter: z.any().optional(),
 })
@@ -23,11 +23,7 @@ export const RepeatData = DataBase.extend({
   definition: z.unknown(),
 })
 
-export const Data = z.discriminatedUnion('type', [
-  SingleData,
-  GroupData,
-  RepeatData,
-])
+export const Data = z.union([SingleData, GroupData, RepeatData])
 
 export const DefinitionSchema = z.object({
   sheet: z.string(),
