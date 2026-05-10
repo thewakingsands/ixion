@@ -8,7 +8,7 @@ import {
   getExdPath,
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
-import { formatLanguage, Language } from '@ffcafe/ixion-utils'
+import { formatLanguage, formatLanguages, Language } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
 import type { DefinitionProvider } from './schema/interface'
 import { getSaintcoinachType } from './schema/utils'
@@ -182,10 +182,10 @@ export class CSVExporter {
           } catch (error) {
             console.warn(`\nFailed exporting ${sheet}`, error)
           }
-        } else {
-          if (format === ExdCSVFormat.Multiple) {
-            for (let i = 0; i < readers.length; i++) {
-              const { reader, languages } = readers[i]
+        } else if (format === ExdCSVFormat.Multiple) {
+          for (let i = 0; i < readers.length; i++) {
+            const { reader, languages } = readers[i]
+            try {
               const exh =
                 i === 0
                   ? primaryExh
@@ -201,14 +201,19 @@ export class CSVExporter {
                   this.writeFile(outputDir, sheet, language, csv)
                 } catch (error) {
                   console.warn(
-                    `\nFailed exporting ${sheet}:lang=${language}`,
+                    `\nFailed exporting ${sheet}:lang=${formatLanguage(language)}`,
                     error,
                   )
                 }
               }
+            } catch (error) {
+              console.warn(
+                `\nFailed exporting ${sheet}:lang=${formatLanguages(languages)}`,
+                error,
+              )
             }
           }
-
+        } else {
           // Merged format is not implemented yet
         }
 
