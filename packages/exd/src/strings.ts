@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ExcelColumnDataType, type SqPackReader } from '@ffcafe/ixion-sqpack'
-import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
+import { formatLanguage, Language } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
 import { formatSeString, parseSeString } from './sestring'
 import {
@@ -97,28 +97,24 @@ export class StringsExporter {
     const stringMap: Record<string, Map<string, any[]>> = {}
     const idSet = new Set<string>()
     for (const [language, reader] of readers.entries()) {
+      const code = formatLanguage(language)
       try {
         const header = await readExhHeaderFromReader(reader, sheet)
         const columnIndexes = getStringColumnIndexes(header)
         columnCount = Math.max(columnCount, columnIndexes.length)
 
-        stringMap[languageToCodeMap[language]] = await readColumnsFromSheet(
-          reader,
-          {
-            sheetName: sheet,
-            header,
-            language,
-            columnIndexes,
-          },
-        )
+        stringMap[code] = await readColumnsFromSheet(reader, {
+          sheetName: sheet,
+          header,
+          language,
+          columnIndexes,
+        })
 
-        for (const id of stringMap[languageToCodeMap[language]].keys()) {
+        for (const id of stringMap[code].keys()) {
           idSet.add(id)
         }
       } catch {
-        console.error(
-          `${sheet}: Failed reading language ${languageToCodeMap[language]}`,
-        )
+        console.error(`${sheet}: Failed reading language ${code}`)
       }
     }
 

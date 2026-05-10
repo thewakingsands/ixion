@@ -32,3 +32,11 @@ export const languageToCodeMap: Record<Language, string> = {
   [Language.Korean]: 'ko',
   [Language.ChineseTraditional2]: 'tc',
 }
+
+export function formatLanguage(lang: Language) {
+  return languageToCodeMap[lang] || `unk(${lang})`
+}
+
+export function formatLanguages(arr: Language[]) {
+  return arr.map(formatLanguage).join(', ')
+}

@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createExdFilter, ExdCSVFormat } from '@ffcafe/ixion-exd'
 import { servers } from '@ffcafe/ixion-server'
-import { languageToCodeMap } from '@ffcafe/ixion-utils'
+import { formatLanguages } from '@ffcafe/ixion-utils'
 import type { Command } from 'commander'
 import { parseServerVersions } from '../actions/exd-base'
 import { buildExdFiles } from '../actions/exd-build'
@@ -406,9 +406,7 @@ export function registerExdCommand(program: Command) {
 
           console.log(`📊 Exporting EXD files${description}...`)
           console.log(`  Format: ${options.format || 'single'}`)
-          console.log(
-            `  Languages: ${languages.map((l) => languageToCodeMap[l]).join(', ')}`,
-          )
+          console.log(`  Languages: ${formatLanguages(languages)}`)
           await exportExdFilesToCSV({
             server,
             version: options.version,

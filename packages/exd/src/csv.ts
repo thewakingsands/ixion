@@ -8,7 +8,7 @@ import {
   getExdPath,
   type SqPackReader,
 } from '@ffcafe/ixion-sqpack'
-import { Language, languageToCodeMap } from '@ffcafe/ixion-utils'
+import { formatLanguage, Language } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
 import type { DefinitionProvider } from './schema/interface'
 import { getSaintcoinachType } from './schema/utils'
@@ -42,7 +42,7 @@ export enum ExdCSVFormat {
 
 const csvName = (sheet: string, language?: Language) => {
   if (language) {
-    return `${sheet}.${languageToCodeMap[language]}.csv`
+    return `${sheet}.${formatLanguage(language)}.csv`
   }
   return `${sheet}.csv`
 }
