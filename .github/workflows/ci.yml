@@ -72,6 +72,24 @@ jobs:
             .ixion-config.ci.json
             package.json
 
+  update-xivstrings:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Trigger xivstrings update
+        env:
+          XIVSTRINGS_ROOT: ${{ secrets.XIVSTRINGS_ROOT }}
+          XIVSTRINGS_UPDATE_TOKEN: ${{ secrets.XIVSTRINGS_UPDATE_TOKEN }}
+        run: node scripts/trigger-xivstrings-update.mjs
+
   datamining-cn:
     runs-on: ubuntu-latest
     needs: build
