@@ -15,6 +15,7 @@ import {
   readSqPackFileInfo,
   readSqPackStandardChunkInfo,
   type SqPackFileInfo,
+  type SqPackStandardChunkInfo,
 } from './structs/sqpack-data'
 import {
   type IndexHashData,
@@ -23,6 +24,11 @@ import {
   readIndex2HashTableEntry,
   readIndexHashTableEntry,
 } from './structs/sqpack-index'
+import {
+  readSqPackTextureChunkInfo,
+  type SqPackTextureChunkInfo,
+  sqPackTextureHeaderSize,
+} from './structs/texture'
 import { calculateIndex2Hash, calculateIndexHash } from './utils/hash'
 
 const debug = $debug('ixion:sqpack:reader')
@@ -37,6 +43,24 @@ export interface SqPackReaderOptions {
    * Use index2 file instead of index file
    */
   useIndex2?: boolean
+}
+
+interface ReadFileOptions {
+  handle: FileHandle
+  offset: number
+
+  fileInfo: SqPackFileInfo
+  fileInfoBuffer: Buffer
+}
+
+interface ChunkExpections {
+  compressedSize: number
+  uncompressedSize: number
+}
+
+interface ReadChunkOptions extends ChunkExpections {
+  offset: number
+  blockSizes?: number[]
 }
 
 export class SqPackReader {
@@ -140,93 +164,198 @@ export class SqPackReader {
       this.dataHandles.set(fileIndex.dataFileId, handle)
     }
 
-    const buffer = Buffer.alloc(blockSize) // File header size
-
-    // Read file header
-    await handle.read(buffer, 0, blockSize, fileIndex.offset)
-    const fileHeader = readSqPackFileInfo(SmartBuffer.fromBuffer(buffer))
-    if (fileHeader.rawFileSize === 0) {
+    const [fileInfo, fileInfoBuffer] = await this.readFileInfo(
+      handle,
+      fileIndex.offset,
+    )
+    if (fileInfo.rawFileSize === 0) {
       throw new Error(`File ${filePath} is empty`)
     }
 
-    if (fileHeader.type === FileType.Standard) {
-      return this.readStandardFile(handle, fileIndex.offset, fileHeader)
+    const options: ReadFileOptions = {
+      handle,
+      offset: fileIndex.offset,
+      fileInfo,
+      fileInfoBuffer,
+    }
+
+    if (fileInfo.type === FileType.Standard) {
+      return this.readStandardFile(options)
+    }
+
+    if (fileInfo.type === FileType.Texture) {
+      return this.readTextureFile(options)
     }
 
     // TODO: Handle other file types
-    throw new Error(`Unsupported file type: ${fileHeader.type}`)
+    throw new Error(
+      `Unsupported file type: ${FileType[fileInfo.type] || fileInfo.type}`,
+    )
   }
 
-  async readStandardFile(
+  async readFileInfo(
     handle: FileHandle,
     offset: number,
-    fileInfo: SqPackFileInfo,
-  ): Promise<Buffer> {
-    // Header can be larger than blockSize, so we need to read it again
-    const headerBuffer = Buffer.alloc(fileInfo.size)
-    await handle.read(headerBuffer, 0, fileInfo.size, offset)
+  ): Promise<[SqPackFileInfo, Buffer]> {
+    const buffer = await this.#read(handle, offset)
+    const info = readSqPackFileInfo(SmartBuffer.fromBuffer(buffer))
+    if (info.size === blockSize) {
+      return [info, buffer]
+    }
 
-    // Read blocks
-    const smartBuffer = SmartBuffer.fromBuffer(headerBuffer)
-    smartBuffer.readOffset = 0x14 // skip 5 uint32le
-    const chunkCount = smartBuffer.readUInt32LE()
-    const chunks: Buffer[] = []
+    if (info.size > blockSize) {
+      const wholeBuffer = Buffer.alloc(info.size)
+      buffer.copy(wholeBuffer, 0, 0, blockSize)
 
-    let bytesRead = 0
-    for (let i = 0; i < chunkCount; i++) {
-      const chunkInfo = readSqPackStandardChunkInfo(smartBuffer)
-      const chunkOffset = offset + fileInfo.size + chunkInfo.offset
-      const chunkHeaderBuffer = Buffer.alloc(16)
-      await handle.read(chunkHeaderBuffer, 0, 16, chunkOffset)
-      const chunkHeader = readSqPackDataChunkHeader(
-        SmartBuffer.fromBuffer(chunkHeaderBuffer),
+      await handle.read(
+        wholeBuffer,
+        blockSize,
+        info.size - blockSize,
+        offset + blockSize,
       )
 
-      const dataOffset = chunkOffset + chunkHeader.size
-      let compressed = true
+      return [info, wholeBuffer]
+    }
 
-      // chunkInfo.compressedSize is aligned to blockSize
-      if (chunkHeader.compressedSize > chunkInfo.compressedSize) {
-        if (chunkHeader.compressedSize === uncompressedChunk) {
-          compressed = false
-        } else {
-          debug('chunkHeader: %j, chunkInfo: %j', chunkHeader, chunkInfo)
-          throw new Error(
-            `Invalid chunk compressed size ${chunkHeader.compressedSize} > ${chunkInfo.compressedSize}`,
+    return [info, buffer.subarray(0, info.size)]
+  }
+
+  async readStandardFile({
+    handle,
+    offset,
+    fileInfo,
+    fileInfoBuffer,
+  }: ReadFileOptions): Promise<Buffer> {
+    // Read blocks
+    const smartBuffer = SmartBuffer.fromBuffer(fileInfoBuffer)
+    smartBuffer.readOffset = 0x14 // skip 5 uint32le
+    const chunkCount = smartBuffer.readUInt32LE()
+    const chunkInfos: SqPackStandardChunkInfo[] = []
+
+    for (let i = 0; i < chunkCount; i++) {
+      const chunkInfo = readSqPackStandardChunkInfo(smartBuffer)
+      chunkInfos.push(chunkInfo)
+    }
+
+    return this.readDataChunks(
+      handle,
+      chunkInfos,
+      offset + fileInfo.size,
+      fileInfo.rawFileSize,
+    )
+  }
+
+  async readTextureFile({
+    handle,
+    offset,
+    fileInfo,
+    fileInfoBuffer,
+  }: ReadFileOptions): Promise<Buffer> {
+    const smartBuffer = SmartBuffer.fromBuffer(fileInfoBuffer)
+    smartBuffer.readOffset = 0x14 // skip 5 uint32le
+
+    const chunkCount = smartBuffer.readUInt32LE()
+    const chunkInfos: SqPackTextureChunkInfo[] = []
+
+    let subBlockCount = 0
+    for (let i = 0; i < chunkCount; ++i) {
+      const chunkInfo = readSqPackTextureChunkInfo(smartBuffer)
+      chunkInfos.push(chunkInfo)
+      subBlockCount += chunkInfo.blockCount
+    }
+
+    const blockSizes: number[] = []
+    for (let i = 0; i < subBlockCount; ++i) {
+      blockSizes.push(smartBuffer.readUInt16LE())
+    }
+
+    const textureHeaderBuffer = await this.#read(
+      handle,
+      offset + fileInfo.size,
+      sqPackTextureHeaderSize,
+    )
+    const buffer = await this.readDataChunks(
+      handle,
+      chunkInfos.map((info) => ({
+        ...info,
+        blockSizes: blockSizes.slice(
+          info.blockOffset,
+          info.blockOffset + info.blockCount,
+        ),
+      })),
+      offset + fileInfo.size,
+      fileInfo.rawFileSize - sqPackTextureHeaderSize,
+    )
+
+    return Buffer.concat([textureHeaderBuffer, buffer])
+  }
+
+  private async readDataChunk(
+    handle: FileHandle,
+    offset: number,
+  ): Promise<Buffer> {
+    const chunkHeaderBuffer = await this.#read(handle, offset, 16)
+    const chunkHeader = readSqPackDataChunkHeader(
+      SmartBuffer.fromBuffer(chunkHeaderBuffer),
+    )
+
+    const dataOffset = offset + chunkHeader.size
+    let compressed = true
+    if (chunkHeader.compressedSize === uncompressedChunk) {
+      compressed = false
+    }
+
+    const size = compressed
+      ? chunkHeader.compressedSize
+      : chunkHeader.uncompressedSize
+    const chunk = await this.#read(handle, dataOffset, size)
+
+    if (!compressed) {
+      return chunk
+    }
+
+    const inflated = inflateRawSync(chunk)
+    if (inflated.length !== chunkHeader.uncompressedSize) {
+      throw new Error('Invalid file size')
+    }
+
+    return inflated
+  }
+
+  private async readDataChunks(
+    handle: FileHandle,
+    chunkInfos: ReadChunkOptions[],
+    baseOffset: number,
+    expectedSize: number,
+  ) {
+    const chunks: Buffer[] = []
+    let bytesRead = 0
+
+    for (const { offset, blockSizes } of chunkInfos) {
+      if (blockSizes) {
+        let blockOffset = 0
+        for (const size of blockSizes) {
+          const chunk = await this.readDataChunk(
+            handle,
+            offset + baseOffset + blockOffset,
           )
+
+          chunks.push(chunk)
+          bytesRead += chunk.length
+          blockOffset += size
         }
-      }
-
-      if (chunkHeader.uncompressedSize !== chunkInfo.uncompressedSize) {
-        debug('chunkHeader: %j, chunkInfo: %j', chunkHeader, chunkInfo)
-        throw new Error(
-          `Invalid chunk uncompressed size ${chunkHeader.uncompressedSize} !== ${chunkInfo.uncompressedSize}`,
-        )
-      }
-
-      const size = compressed
-        ? chunkHeader.compressedSize
-        : chunkHeader.uncompressedSize
-      // debug('reading chunk %d, offset %d, size %d', i, dataOffset, size)
-      const chunk = Buffer.alloc(size)
-      await handle.read(chunk, 0, size, dataOffset)
-
-      if (compressed) {
-        const inflated = inflateRawSync(chunk)
-        if (inflated.length !== chunkInfo.uncompressedSize) {
-          throw new Error('Invalid file size')
-        }
-
-        chunks.push(inflated)
-        bytesRead += inflated.length
       } else {
+        const chunk = await this.readDataChunk(handle, offset + baseOffset)
+
         chunks.push(chunk)
         bytesRead += chunk.length
       }
     }
 
-    if (bytesRead !== fileInfo.rawFileSize) {
-      throw new Error('Invalid file size')
+    if (bytesRead !== expectedSize) {
+      throw new Error(
+        `Invalid file size: expected(${expectedSize}) !== actual(${bytesRead})`,
+      )
     }
 
     return Buffer.concat(chunks)
@@ -250,5 +379,12 @@ export class SqPackReader {
 
     this.dataHandles.clear()
     this.indexEntries.clear()
+  }
+
+  async #read(handle: FileHandle, offset: number, length = blockSize) {
+    const buffer = Buffer.alloc(length)
+    await handle.read(buffer, 0, length, offset)
+
+    return buffer
   }
 }

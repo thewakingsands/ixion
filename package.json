@@ -21,5 +21,6 @@
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "packageManager": "pnpm@11.0.8"
 }

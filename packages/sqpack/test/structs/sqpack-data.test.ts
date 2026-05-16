@@ -12,6 +12,10 @@ import {
   writeSqPackFileInfo,
   writeSqPackStandardChunkInfo,
 } from '../../src/structs/sqpack-data'
+import {
+  readSqPackTextureHeader,
+  type SqPackTextureHeader,
+} from '../../src/structs/texture'
 
 describe('SqPack Data Structs', () => {
   describe('SqPackFileInfo', () => {
@@ -245,6 +249,48 @@ describe('SqPack Data Structs', () => {
       expect(readBlockInfo.offset).toBe(0xffffffff)
       expect(readBlockInfo.compressedSize).toBe(0xffff)
       expect(readBlockInfo.uncompressedSize).toBe(0xffff)
+    })
+  })
+
+  describe('SqPackTextureHeader', () => {
+    it('should read texture header correctly', () => {
+      const buffer = Buffer.alloc(0x50)
+      buffer.writeUInt32LE(0x12000000, 0)
+      buffer.writeUInt32LE(0x1451, 4)
+      buffer.writeUInt16LE(512, 8)
+      buffer.writeUInt16LE(256, 10)
+      buffer.writeUInt16LE(1, 12)
+      buffer.writeUInt8(5, 14)
+      buffer.writeUInt8(6, 15)
+
+      const lodOffsets = [0x10, 0x40, 0x80]
+      for (const [index, lodOffset] of lodOffsets.entries()) {
+        buffer.writeUInt32LE(lodOffset, 16 + index * 4)
+      }
+
+      const surfaceOffsets = Array.from(
+        { length: 13 },
+        (_, index) => 0x100 + index * 0x20,
+      )
+      for (const [index, surfaceOffset] of surfaceOffsets.entries()) {
+        buffer.writeUInt32LE(surfaceOffset, 28 + index * 4)
+      }
+
+      const textureHeader = readSqPackTextureHeader(
+        SmartBuffer.fromBuffer(buffer),
+      )
+
+      expect(textureHeader).toEqual<SqPackTextureHeader>({
+        attribute: 0x12000000,
+        format: 0x1451,
+        width: 512,
+        height: 256,
+        depth: 1,
+        mipLevels: 5,
+        arraySize: 6,
+        lodOffsets,
+        surfaceOffsets,
+      })
     })
   })
 })
