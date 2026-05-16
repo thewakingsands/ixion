@@ -6,13 +6,32 @@ import $debug from 'debug'
 const debug = $debug('zipatch:fs')
 
 const zeroBuffer = Buffer.alloc(1024, 0)
-export class FileSystem {
+export interface FileRange {
+  start: number
+  end: number
+}
+
+export interface ZipatchFileSystem {
+  workspace: string
+  close(): Promise<void>
+  isPathAllowed(path: string): boolean
+  write(path: string, buf: Buffer, offset?: number): Promise<boolean>
+  erase(path: string, length: number, offset: number): Promise<boolean>
+  createDirectory(path: string): Promise<void>
+  removeDirectory(path: string): Promise<void>
+}
+
+export class FileSystem implements ZipatchFileSystem {
   private fileHandles = new Map<string, FileHandle>()
 
   constructor(
     private root: string,
     private allowList: string[] = [],
   ) {}
+
+  get workspace(): string {
+    return this.root
+  }
 
   /**
    * Close all open file handles
@@ -35,7 +54,14 @@ export class FileSystem {
    * Check if a path is allowed based on the allowlist
    */
   isPathAllowed(path: string): boolean {
-    return !this.allowList.length || this.allowList.includes(path)
+    return (
+      !this.allowList.length ||
+      this.allowList.some((pattern) =>
+        pattern.endsWith('*')
+          ? path.startsWith(pattern.slice(0, -1))
+          : pattern === path,
+      )
+    )
   }
 
   /**
@@ -126,5 +152,83 @@ export class FileSystem {
     this.fileHandles.set(path, handle)
 
     return handle
+  }
+}
+
+export class VirtualFileSystem implements ZipatchFileSystem {
+  private ranges = new Map<string, FileRange[]>()
+
+  constructor(
+    private root: string,
+    private allowList: string[] = [],
+  ) {}
+
+  get workspace(): string {
+    return this.root
+  }
+
+  async close(): Promise<void> {
+    // do nothing
+  }
+
+  isPathAllowed(path: string): boolean {
+    return (
+      !this.allowList.length ||
+      this.allowList.some((pattern) =>
+        pattern.endsWith('*')
+          ? path.startsWith(pattern.slice(0, -1))
+          : pattern === path,
+      )
+    )
+  }
+
+  async write(path: string, buf: Buffer, offset: number = 0): Promise<boolean> {
+    this.recordRange(path, offset, offset + buf.length)
+    return true
+  }
+
+  async erase(path: string, length: number, offset: number): Promise<boolean> {
+    this.recordRange(path, offset, offset + length)
+    return true
+  }
+
+  async createDirectory(path: string): Promise<void> {
+    // do nothing
+  }
+
+  async removeDirectory(path: string): Promise<void> {
+    // do nothing
+  }
+
+  getRecordedRanges(): Map<string, FileRange[]> {
+    return new Map(
+      [...this.ranges.entries()].map(([path, ranges]) => [
+        path,
+        ranges.map((range) => ({ ...range })),
+      ]),
+    )
+  }
+
+  private recordRange(path: string, start: number, end: number) {
+    if (!this.isPathAllowed(path)) {
+      return
+    }
+
+    const ranges = this.ranges.get(path) ?? []
+    ranges.push({ start, end })
+    ranges.sort((left, right) => left.start - right.start)
+
+    const merged: FileRange[] = []
+    for (const range of ranges) {
+      const current = merged.at(-1)
+      if (!current || range.start > current.end) {
+        merged.push({ ...range })
+        continue
+      }
+
+      current.end = Math.max(current.end, range.end)
+    }
+
+    this.ranges.set(path, merged)
   }
 }

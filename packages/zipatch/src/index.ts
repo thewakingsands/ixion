@@ -9,7 +9,7 @@ import {
   type ZipatchPreloadData,
   type ZipatchPreloadedChunk,
 } from './datasource'
-import { FileSystem } from './fs'
+import { FileSystem, VirtualFileSystem, type ZipatchFileSystem } from './fs'
 import type { ZipatchChunk, ZipatchContext } from './interface'
 
 const zipatchMagic = [
@@ -25,6 +25,12 @@ export type {
   ZipatchPreloadData,
   ZipatchPreloadedChunk,
 } from './datasource'
+export {
+  type FileRange,
+  FileSystem,
+  VirtualFileSystem,
+  type ZipatchFileSystem,
+} from './fs'
 
 export class ZipatchReader {
   private source!: ZipatchDataSource
@@ -127,12 +133,15 @@ export class ZipatchReader {
    * Extract the zipatch file to a directory.
    */
   async applyTo(path: string, allowList: string[] = []) {
-    // Ensure the extraction directory exists
     const fs = new FileSystem(path, allowList)
+    await this.apply(fs, allowList)
+  }
+
+  async apply(fs: ZipatchFileSystem, allowList: string[] = []) {
     await fs.createDirectory('/')
     const context: ZipatchContext = {
       platform: 'win32',
-      workspace: path,
+      workspace: fs.workspace,
       allowList,
       fs,
     }

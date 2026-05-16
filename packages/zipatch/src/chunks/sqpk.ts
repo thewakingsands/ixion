@@ -1,7 +1,7 @@
 import { inflateRawSync } from 'node:zlib'
 import $debug from 'debug'
 import { SmartBuffer } from 'smart-buffer'
-import type { FileSystem } from '../fs'
+import type { ZipatchFileSystem } from '../fs'
 import type { ZipatchChunkHandler } from '../interface'
 import {
   type FileHeader,
@@ -27,7 +27,7 @@ const debug = $debug('zipatch:sqpk')
  * Handles SqPack-based game install operations
  */
 
-type SqpkHandler = (buffer: SmartBuffer, fs: FileSystem) => Promise<void>
+type SqpkHandler = (buffer: SmartBuffer, fs: ZipatchFileSystem) => Promise<void>
 
 const eraseHandler: SqpkHandler = async (buffer, fs) => {
   const payload = readSqpkDataHeader(buffer)
@@ -55,10 +55,9 @@ const blockHeaderSize = 16
 const addFileHandler = async (
   fileHeader: FileHeader,
   buffer: SmartBuffer,
-  fs: FileSystem,
+  fs: ZipatchFileSystem,
 ) => {
-  const handle = await fs.getFileHandle(fileHeader.filePath)
-  if (!handle) {
+  if (!fs.isPathAllowed(fileHeader.filePath)) {
     return
   }
 
@@ -95,10 +94,10 @@ const addFileHandler = async (
     const data = buffer.readBuffer(blockHeader.blockSize)
     if (blockHeader.isBlockCompressed) {
       const inflated = inflateRawSync(data)
-      await handle.write(inflated, 0, inflated.length, offset)
+      await fs.write(fileHeader.filePath, inflated, offset)
       bytesWritten += inflated.length
     } else {
-      await handle.write(data, 0, data.length, offset)
+      await fs.write(fileHeader.filePath, data, offset)
       bytesWritten += data.length
     }
 

@@ -1,10 +1,10 @@
-import type { FileSystem } from './fs'
+import type { ZipatchFileSystem } from './fs'
 
 export interface ZipatchContext {
   platform: 'win32'
   workspace: string
   allowList: string[]
-  fs: FileSystem
+  fs: ZipatchFileSystem
 }
 
 export interface ZipatchChunk {
