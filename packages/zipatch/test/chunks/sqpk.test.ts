@@ -89,7 +89,7 @@ describe('SQPK Chunk Processor', () => {
       expect(operations[0]).toMatchObject({
         type: 'getFileHandle',
         path: 'ffxiv_dx11.exe',
-        create: true,
+        create: false,
       })
       expect(operations[1]).toMatchObject({
         type: 'fileWrite',
