@@ -2,7 +2,8 @@ import type { PatchEntry } from '../interface'
 
 // game/c38effbc/D2025.06.04.0000.0000.patch
 // game/ex1/77420d17/D2024.10.30.0000.0000.patch
-const urlRegex = /(?:ex(\d+)\/)?([0-9a-f]+)\/([0-9A-Za-z]?[\d.]+)\.patch/
+// game/ex1/77420d17/H2024.08.27.0002.0000b.patch
+const urlRegex = /(?:ex(\d+)\/)?([0-9a-f]+)\/([0-9A-Za-z]?[\d.]+[a-z]*)\.patch/
 
 export const parsePatchList = (
   responseText: string,
