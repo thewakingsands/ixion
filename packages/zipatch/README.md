@@ -16,11 +16,21 @@ import { ZipatchReader } from '@ffcafe/ixion-zipatch';
 // Open a patch file
 const reader = await ZipatchReader.open('path/to/patch.patch');
 
+// Open a patch URL with HTTP range requests
+const remoteReader = await ZipatchReader.open('https://example.com/patch.patch');
+
+// Preload chunk headers once, then reuse them for later opens
+const chunks = await ZipatchReader.preload('https://example.com/patch.patch');
+const preloadedReader = await ZipatchReader.open(
+  'https://example.com/patch.patch',
+  { chunks },
+);
+
 // Extract all files
-await reader.extractTo('./extracted');
+await reader.applyTo('./extracted');
 
 // Extract with allow list
-await reader.extractTo('./extracted', ['sqpack/', 'game/']);
+await reader.applyTo('./extracted', ['sqpack/', 'game/']);
 
 // List chunks
 for await (const chunk of reader.chunks()) {

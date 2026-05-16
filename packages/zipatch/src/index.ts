@@ -1,5 +1,14 @@
-import { type FileHandle, open } from 'node:fs/promises'
 import { processChunk } from './chunks'
+import {
+  createChunkReader,
+  createFileDataSource,
+  createHttpDataSource,
+  isHttpUrl,
+  type ZipatchDataSource,
+  type ZipatchOpenOptions,
+  type ZipatchPreloadData,
+  type ZipatchPreloadedChunk,
+} from './datasource'
 import { FileSystem } from './fs'
 import type { ZipatchChunk, ZipatchContext } from './interface'
 
@@ -11,46 +20,106 @@ const zipatchMagic = [
 const CHUNK_HEADER_SIZE = 8
 const CRC32_SIZE = 4
 
+export type {
+  ZipatchOpenOptions,
+  ZipatchPreloadData,
+  ZipatchPreloadedChunk,
+} from './datasource'
+
 export class ZipatchReader {
-  private handle!: FileHandle
-  private pos = 0
-  private fileSize = 0
+  private source!: ZipatchDataSource
+  private preloaded?: ZipatchPreloadData
 
   /**
    * Open a zipatch file.
    */
-  static async open(path: string) {
+  static async open(path: string, options: ZipatchOpenOptions = {}) {
     const reader = new ZipatchReader()
-    reader.handle = await open(path)
-
-    const stat = await reader.handle.stat()
-    reader.fileSize = stat.size
+    reader.preloaded = options.chunks ?? options.preloaded
+    reader.source = isHttpUrl(path)
+      ? await createHttpDataSource(path, reader.preloaded)
+      : await createFileDataSource(path)
 
     // check the file magic
-    const { buffer } = await reader.read(null, zipatchMagic.length)
+    const { buffer } = await reader.source.readAt(0, zipatchMagic.length)
     if (!zipatchMagic.every((c, i) => c === buffer[i])) {
       throw new Error('Zipatch magic mismatch')
     }
 
-    reader.pos = zipatchMagic.length
     return reader
+  }
+
+  /**
+   * Preload chunk headers for local or remote zipatch access.
+   */
+  static async preload(path: string): Promise<ZipatchPreloadData> {
+    const source = isHttpUrl(path)
+      ? await createHttpDataSource(path)
+      : await createFileDataSource(path)
+
+    try {
+      const { buffer } = await source.readAt(0, zipatchMagic.length)
+      if (!zipatchMagic.every((c, i) => c === buffer[i])) {
+        throw new Error('Zipatch magic mismatch')
+      }
+
+      const chunks: ZipatchPreloadedChunk[] = []
+      let pos = zipatchMagic.length
+      const header = Buffer.alloc(CHUNK_HEADER_SIZE)
+
+      while (pos < source.fileSize) {
+        const { bytesRead, buffer: headerBuffer } = await source.readAt(
+          pos,
+          CHUNK_HEADER_SIZE,
+          header,
+        )
+        if (bytesRead !== CHUNK_HEADER_SIZE) {
+          break
+        }
+
+        const size = headerBuffer.readUInt32BE(0)
+        const name = headerBuffer.subarray(4).toString()
+        const offset = pos + CHUNK_HEADER_SIZE
+        chunks.push({ name, size, offset })
+        pos = offset + size + CRC32_SIZE
+      }
+
+      return {
+        fileSize: source.fileSize,
+        chunks,
+      }
+    } finally {
+      await source.close()
+    }
   }
 
   /**
    * Iterate over the chunks in the zipatch file.
    */
   async *chunks(): AsyncGenerator<ZipatchChunk> {
-    const header = Buffer.alloc(8)
-    while (this.pos < this.fileSize) {
-      const { bytesRead } = await this.read(header, CHUNK_HEADER_SIZE)
+    if (this.preloaded) {
+      for (const chunk of this.preloaded.chunks) {
+        yield createChunkReader(this.source, chunk)
+      }
+      return
+    }
+
+    let pos = zipatchMagic.length
+    const header = Buffer.alloc(CHUNK_HEADER_SIZE)
+    while (pos < this.source.fileSize) {
+      const { bytesRead, buffer: headerBuffer } = await this.source.readAt(
+        pos,
+        CHUNK_HEADER_SIZE,
+        header,
+      )
       if (bytesRead !== CHUNK_HEADER_SIZE) break
 
-      const size = header.readUint32BE(0)
-      const name = header.subarray(4).toString()
+      const size = headerBuffer.readUint32BE(0)
+      const name = headerBuffer.subarray(4).toString()
+      const offset = pos + CHUNK_HEADER_SIZE
 
-      const posOfPayload = this.pos
-      yield { name, size, read: this.read }
-      this.pos = posOfPayload + size + CRC32_SIZE
+      yield createChunkReader(this.source, { name, size, offset })
+      pos = offset + size + CRC32_SIZE
     }
   }
 
@@ -79,22 +148,6 @@ export class ZipatchReader {
    * Close the file handle.
    */
   async close() {
-    await this.handle.close()
-  }
-
-  private read = async (buf: Buffer | null, length: number) => {
-    if (this.pos >= this.fileSize) {
-      throw new Error('Moved out of file')
-    }
-
-    const ret = await this.handle.read(
-      buf || Buffer.alloc(length),
-      0,
-      length,
-      this.pos,
-    )
-    this.pos += ret.bytesRead
-
-    return ret
+    await this.source.close()
   }
 }

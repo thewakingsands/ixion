@@ -27,7 +27,7 @@ export const processAddDirectory: ZipatchChunkHandler = async (
   context,
 ) => {
   const path = await parseDirectoryChunk(chunk)
-  await context.fs.createDirectory(path, true)
+  await context.fs.createDirectory(path)
   debug(`Created directory: ${path}`)
 }
 
@@ -39,6 +39,6 @@ export const processDeleteDirectory: ZipatchChunkHandler = async (
   context,
 ) => {
   const path = await parseDirectoryChunk(chunk)
-  await context.fs.removeDirectory(path, true)
+  await context.fs.removeDirectory(path)
   debug(`Deleted directory: ${path}`)
 }
