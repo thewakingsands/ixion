@@ -36,6 +36,18 @@ export const mergeIndexHash = (dirHash: number, fileHash: number): bigint => {
   return (BigInt(dirHash) << 32n) | BigInt(fileHash)
 }
 
+export const isDirHashMatches = (indexHash: bigint, dirHash: number) => {
+  return BigInt(dirHash) === indexHash >> 32n
+}
+
+export const getDirHash = (indexHash: bigint): number => {
+  return Number(indexHash >> 32n)
+}
+
+export const getFileHash = (indexHash: bigint): number => {
+  return Number(indexHash & 0xffffffffn)
+}
+
 /**
  * Calculate hash for index files (directory + filename)
  * @see https://xiv.dev/data-files/sqpack#reading-index
