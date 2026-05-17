@@ -1,13 +1,9 @@
-import { type FileHandle, open, readFile } from 'node:fs/promises'
+import { open, readFile } from 'node:fs/promises'
 import { inflateRawSync } from 'node:zlib'
 import $debug from 'debug'
 import { SmartBuffer } from 'smart-buffer'
+import { readIndexEntries } from './index-reader'
 import type { SqPackFileIndex } from './interface'
-import {
-  readSqPackHeader,
-  readSqPackIndexHeader,
-  validateSqPackMagic,
-} from './structs/header'
 import {
   blockSize,
   FileType,
@@ -17,13 +13,7 @@ import {
   type SqPackFileInfo,
   type SqPackStandardChunkInfo,
 } from './structs/sqpack-data'
-import {
-  type IndexHashData,
-  index2HashTableEntrySize,
-  indexHashTableEntrySize,
-  readIndex2HashTableEntry,
-  readIndexHashTableEntry,
-} from './structs/sqpack-index'
+import type { IndexHashData } from './structs/sqpack-index'
 import {
   readSqPackTextureChunkInfo,
   type SqPackTextureChunkInfo,
@@ -34,7 +24,24 @@ import { calculateIndex2Hash, calculateIndexHash } from './utils/hash'
 const debug = $debug('ixion:sqpack:reader')
 const uncompressedChunk = 32000
 
+export interface SqPackFileReader {
+  read<T extends NodeJS.ArrayBufferView>(
+    buffer: T,
+    offset?: number,
+    length?: number,
+    position?: number,
+  ): Promise<unknown>
+  close(): Promise<unknown>
+}
+
+export type SqPackFileOpenHandler = (path: string) => Promise<SqPackFileReader>
+
+const fsOpenHandler: SqPackFileOpenHandler = (path: string) => open(path, 'r')
+
 export interface SqPackReaderOptions {
+  open?: SqPackFileOpenHandler
+  indexEntries?: Map<number | bigint, IndexHashData>
+
   /**
    * path-to/0a0000.win32
    */
@@ -44,9 +51,8 @@ export interface SqPackReaderOptions {
    */
   useIndex2?: boolean
 }
-
 interface ReadFileOptions {
-  handle: FileHandle
+  handle: SqPackFileReader
   offset: number
 
   fileInfo: SqPackFileInfo
@@ -64,12 +70,15 @@ interface ReadChunkOptions extends ChunkExpections {
 }
 
 export class SqPackReader {
-  private dataHandles: Map<number, FileHandle> = new Map()
-  private indexEntries: Map<number | bigint, IndexHashData> = new Map()
+  private dataHandles: Map<number, SqPackFileReader> = new Map()
+  private indexEntries: Map<number | bigint, IndexHashData>
   private options: SqPackReaderOptions
+  private openHandler: SqPackFileOpenHandler
 
   constructor(options: SqPackReaderOptions) {
     this.options = options
+    this.indexEntries = options.indexEntries || new Map()
+    this.openHandler = options.open || fsOpenHandler
   }
 
   /**
@@ -77,7 +86,9 @@ export class SqPackReader {
    */
   static async open(options: SqPackReaderOptions): Promise<SqPackReader> {
     const reader = new SqPackReader(options)
-    await reader.loadIndex()
+    if (!options.indexEntries) {
+      await reader.loadIndex()
+    }
     return reader
   }
 
@@ -85,39 +96,12 @@ export class SqPackReader {
    * Load index file and build hash table
    */
   private async loadIndex(): Promise<void> {
-    const ext = this.options.useIndex2 ? 'index2' : 'index'
+    const useIndex2 = !!this.options.useIndex2
+    const ext = useIndex2 ? 'index2' : 'index'
     const indexPath = `${this.options.prefix}.${ext}`
 
     const data = await readFile(indexPath)
-    const buffer = SmartBuffer.fromBuffer(data)
-
-    const sqPackHeader = readSqPackHeader(buffer)
-
-    if (!validateSqPackMagic(sqPackHeader.magic)) {
-      throw new Error('Invalid SqPack magic')
-    }
-
-    // Skip to index data
-    buffer.readOffset = sqPackHeader.size
-    const indexHeader = readSqPackIndexHeader(buffer)
-
-    // Read index entries
-    const indexDataBuffer = data.subarray(
-      indexHeader.indexDataOffset,
-      indexHeader.indexDataOffset + indexHeader.indexDataSize,
-    )
-    const entryBuffer = SmartBuffer.fromBuffer(indexDataBuffer)
-    const entrySize = this.options.useIndex2
-      ? index2HashTableEntrySize
-      : indexHashTableEntrySize
-
-    while (entryBuffer.remaining() >= entrySize) {
-      const entry = this.options.useIndex2
-        ? readIndex2HashTableEntry(entryBuffer)
-        : readIndexHashTableEntry(entryBuffer)
-
-      this.indexEntries.set(entry.hash, entry)
-    }
+    this.indexEntries = readIndexEntries(data, useIndex2)
   }
 
   /**
@@ -160,7 +144,7 @@ export class SqPackReader {
     let handle = this.dataHandles.get(fileIndex.dataFileId)
     if (!handle) {
       const dataPath = `${this.options.prefix}.dat${fileIndex.dataFileId}`
-      handle = await open(dataPath, 'r')
+      handle = await this.openHandler(dataPath)
       this.dataHandles.set(fileIndex.dataFileId, handle)
     }
 
@@ -194,7 +178,7 @@ export class SqPackReader {
   }
 
   async readFileInfo(
-    handle: FileHandle,
+    handle: SqPackFileReader,
     offset: number,
   ): Promise<[SqPackFileInfo, Buffer]> {
     const buffer = await this.#read(handle, offset)
@@ -291,7 +275,7 @@ export class SqPackReader {
   }
 
   private async readDataChunk(
-    handle: FileHandle,
+    handle: SqPackFileReader,
     offset: number,
   ): Promise<Buffer> {
     const chunkHeaderBuffer = await this.#read(handle, offset, 16)
@@ -323,7 +307,7 @@ export class SqPackReader {
   }
 
   private async readDataChunks(
-    handle: FileHandle,
+    handle: SqPackFileReader,
     chunkInfos: ReadChunkOptions[],
     baseOffset: number,
     expectedSize: number,
@@ -381,7 +365,7 @@ export class SqPackReader {
     this.indexEntries.clear()
   }
 
-  async #read(handle: FileHandle, offset: number, length = blockSize) {
+  async #read(handle: SqPackFileReader, offset: number, length = blockSize) {
     const buffer = Buffer.alloc(length)
     await handle.read(buffer, 0, length, offset)
 

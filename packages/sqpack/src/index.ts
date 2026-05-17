@@ -1,3 +1,4 @@
+export * from './index-reader'
 export { PlatformId } from './interface'
 export { SqPackReader } from './reader'
 export * from './structs/excel/exd'
