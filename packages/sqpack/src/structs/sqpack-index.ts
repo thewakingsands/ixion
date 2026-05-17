@@ -78,6 +78,24 @@ export const readIndex2HashTableEntry = (
 }
 
 /**
+ * Index directory hash table entry (index files)
+ */
+export const readIndexDirectoryHashTableEntry = (
+  buffer: SmartBuffer,
+): IndexDirectoryHashTableEntry => {
+  const dirHash = buffer.readUInt32LE()
+  const offset = buffer.readUInt32LE()
+  const length = buffer.readUInt32LE()
+  buffer.readOffset += 4
+
+  return {
+    dirHash,
+    offset,
+    length,
+  }
+}
+
+/**
  * Write index hash table entry (index files)
  */
 export const writeIndexHashTableEntry = (

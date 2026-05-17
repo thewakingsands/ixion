@@ -101,7 +101,8 @@ export class SqPackReader {
     const indexPath = `${this.options.prefix}.${ext}`
 
     const data = await readFile(indexPath)
-    this.indexEntries = readIndexEntries(data, useIndex2)
+    const { indexEntries } = readIndexEntries(data, useIndex2)
+    this.indexEntries = indexEntries
   }
 
   /**
