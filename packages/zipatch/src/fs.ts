@@ -1,15 +1,35 @@
 import { existsSync, writeFileSync } from 'node:fs'
-import { type FileHandle, mkdir, open, rm } from 'node:fs/promises'
+import { type FileHandle, mkdir, open, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import $debug from 'debug'
 
 const debug = $debug('zipatch:fs')
-
 const zeroBuffer = Buffer.alloc(1024, 0)
-export interface FileRange {
+const isPathAllowed = (path: string, allowList: string[]) => {
+  return (
+    !allowList.length ||
+    allowList.some((pattern) =>
+      pattern.endsWith('*')
+        ? path.startsWith(pattern.slice(0, -1))
+        : pattern === path,
+    )
+  )
+}
+
+export interface WriteFileRange {
+  type: 'write'
+  dataPath: string
   start: number
   end: number
 }
+
+export interface EraseFileRange {
+  type: 'erase'
+  start: number
+  end: number
+}
+
+export type FileRange = WriteFileRange | EraseFileRange
 
 export interface ZipatchFileSystem {
   workspace: string
@@ -54,14 +74,7 @@ export class FileSystem implements ZipatchFileSystem {
    * Check if a path is allowed based on the allowlist
    */
   isPathAllowed(path: string): boolean {
-    return (
-      !this.allowList.length ||
-      this.allowList.some((pattern) =>
-        pattern.endsWith('*')
-          ? path.startsWith(pattern.slice(0, -1))
-          : pattern === path,
-      )
-    )
+    return isPathAllowed(path, this.allowList)
   }
 
   /**
@@ -156,6 +169,7 @@ export class FileSystem implements ZipatchFileSystem {
 }
 
 export class VirtualFileSystem implements ZipatchFileSystem {
+  private counter = 0
   private ranges = new Map<string, FileRange[]>()
 
   constructor(
@@ -168,35 +182,28 @@ export class VirtualFileSystem implements ZipatchFileSystem {
   }
 
   async close(): Promise<void> {
-    // do nothing
+    // no handles to close
   }
 
   isPathAllowed(path: string): boolean {
-    return (
-      !this.allowList.length ||
-      this.allowList.some((pattern) =>
-        pattern.endsWith('*')
-          ? path.startsWith(pattern.slice(0, -1))
-          : pattern === path,
-      )
-    )
+    return isPathAllowed(path, this.allowList)
   }
 
   async write(path: string, buf: Buffer, offset: number = 0): Promise<boolean> {
-    this.recordRange(path, offset, offset + buf.length)
+    await this.recordRange(path, offset, offset + buf.length, buf)
     return true
   }
 
   async erase(path: string, length: number, offset: number): Promise<boolean> {
-    this.recordRange(path, offset, offset + length)
+    await this.recordRange(path, offset, offset + length)
     return true
   }
 
-  async createDirectory(path: string): Promise<void> {
+  async createDirectory(_path: string): Promise<void> {
     // do nothing
   }
 
-  async removeDirectory(path: string): Promise<void> {
+  async removeDirectory(_path: string): Promise<void> {
     // do nothing
   }
 
@@ -209,26 +216,35 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     )
   }
 
-  private recordRange(path: string, start: number, end: number) {
+  private async recordRange(
+    path: string,
+    start: number,
+    end: number,
+    data?: Buffer,
+  ) {
     if (!this.isPathAllowed(path)) {
       return
     }
 
     const ranges = this.ranges.get(path) ?? []
-    ranges.push({ start, end })
-    ranges.sort((left, right) => left.start - right.start)
+    if (data) {
+      await mkdir(this.root, { recursive: true })
 
-    const merged: FileRange[] = []
-    for (const range of ranges) {
-      const current = merged.at(-1)
-      if (!current || range.start > current.end) {
-        merged.push({ ...range })
-        continue
-      }
-
-      current.end = Math.max(current.end, range.end)
+      const fileName = this.createTempFileName(path)
+      const dataPath = join(this.root, fileName)
+      await writeFile(dataPath, data)
+      ranges.push({ type: 'write', dataPath, start, end })
+    } else {
+      ranges.push({ type: 'erase', start, end })
     }
 
-    this.ranges.set(path, merged)
+    this.ranges.set(path, ranges)
+  }
+
+  private createTempFileName(path: string) {
+    const sanitized = path.replace(/[\\/.:*?"<>|]/g, '_')
+    const index = this.counter.toString().padStart(6, '0')
+    this.counter += 1
+    return `${index}-${sanitized}.bin`
   }
 }
