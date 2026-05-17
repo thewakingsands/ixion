@@ -1,6 +1,12 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import {
+  createWriteStream,
+  existsSync,
+  type WriteStream,
+  writeFileSync,
+} from 'node:fs'
 import { type FileHandle, mkdir, open, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { finished } from 'node:stream/promises'
 import $debug from 'debug'
 
 const debug = $debug('zipatch:fs')
@@ -16,17 +22,19 @@ const isPathAllowed = (path: string, allowList: string[]) => {
   )
 }
 
-export interface WriteFileRange {
-  type: 'write'
-  dataPath: string
+export interface FileRangeBase {
+  path: string
   start: number
   end: number
 }
 
-export interface EraseFileRange {
+export interface WriteFileRange extends FileRangeBase {
+  type: 'write'
+  dataPath: string
+}
+
+export interface EraseFileRange extends FileRangeBase {
   type: 'erase'
-  start: number
-  end: number
 }
 
 export type FileRange = WriteFileRange | EraseFileRange
@@ -171,6 +179,8 @@ export class FileSystem implements ZipatchFileSystem {
 export class VirtualFileSystem implements ZipatchFileSystem {
   private counter = 0
   private ranges = new Map<string, FileRange[]>()
+  private lastWrite: WriteFileRange | null = null
+  private lastWriteStream: WriteStream | null = null
 
   constructor(
     private root: string,
@@ -182,7 +192,14 @@ export class VirtualFileSystem implements ZipatchFileSystem {
   }
 
   async close(): Promise<void> {
-    // no handles to close
+    if (this.lastWriteStream) {
+      const stream = this.lastWriteStream
+      this.lastWriteStream = null
+      this.lastWrite = null
+
+      stream.close()
+      await finished(stream)
+    }
   }
 
   isPathAllowed(path: string): boolean {
@@ -230,12 +247,39 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     if (data) {
       await mkdir(this.root, { recursive: true })
 
-      const fileName = this.createTempFileName(path)
-      const dataPath = join(this.root, fileName)
-      await writeFile(dataPath, data)
-      ranges.push({ type: 'write', dataPath, start, end })
+      if (
+        this.lastWrite?.path === path &&
+        start === this.lastWrite.end &&
+        this.lastWriteStream
+      ) {
+        debug('[record] append %s, start=%d, end=%d', path, start, end)
+        this.lastWriteStream.write(data)
+        this.lastWrite.end = end
+      } else {
+        const fileName = this.createTempFileName(path)
+        const dataPath = join(this.root, fileName)
+
+        await this.close()
+
+        debug(
+          '[record] write %s, file=%s, start=%d, end=%d',
+          path,
+          fileName,
+          start,
+          end,
+        )
+        const stream = createWriteStream(dataPath)
+        stream.write(data)
+
+        const write = { type: 'write', path, dataPath, start, end } as const
+        this.lastWriteStream = stream
+        this.lastWrite = write
+
+        ranges.push(write)
+      }
     } else {
-      ranges.push({ type: 'erase', start, end })
+      debug('[record] erase %s, start=%d, end=%d', path, start, end)
+      ranges.push({ type: 'erase', path, start, end })
     }
 
     this.ranges.set(path, ranges)
