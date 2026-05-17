@@ -11,6 +11,8 @@ import $debug from 'debug'
 
 const debug = $debug('zipatch:fs')
 const zeroBuffer = Buffer.alloc(1024, 0)
+const MAX_TEMP_FILES = 1000
+
 const isPathAllowed = (path: string, allowList: string[]) => {
   return (
     !allowList.length ||
@@ -192,14 +194,7 @@ export class VirtualFileSystem implements ZipatchFileSystem {
   }
 
   async close(): Promise<void> {
-    if (this.lastWriteStream) {
-      const stream = this.lastWriteStream
-      this.lastWriteStream = null
-      this.lastWrite = null
-
-      stream.close()
-      await finished(stream)
-    }
+    await this.closeLastWriteStream()
   }
 
   isPathAllowed(path: string): boolean {
@@ -224,6 +219,15 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     // do nothing
   }
 
+  getFileRanges(path: string): FileRange[] | null {
+    const ranges = this.ranges.get(path)
+    if (!ranges) {
+      return null
+    }
+
+    return ranges.map((range) => ({ ...range }))
+  }
+
   getRecordedRanges(): Map<string, FileRange[]> {
     return new Map(
       [...this.ranges.entries()].map(([path, ranges]) => [
@@ -231,6 +235,18 @@ export class VirtualFileSystem implements ZipatchFileSystem {
         ranges.map((range) => ({ ...range })),
       ]),
     )
+  }
+
+  async clear() {
+    for (const ranges of this.ranges.values()) {
+      for (const range of ranges) {
+        if (range.type === 'write' && range.dataPath) {
+          await rm(range.dataPath)
+        }
+      }
+    }
+
+    this.ranges.clear()
   }
 
   private async recordRange(
@@ -259,7 +275,7 @@ export class VirtualFileSystem implements ZipatchFileSystem {
         const fileName = this.createTempFileName(path)
         const dataPath = join(this.root, fileName)
 
-        await this.close()
+        await this.closeLastWriteStream()
 
         debug(
           '[record] write %s, file=%s, start=%d, end=%d',
@@ -274,6 +290,10 @@ export class VirtualFileSystem implements ZipatchFileSystem {
         const write = { type: 'write', path, dataPath, start, end } as const
         this.lastWriteStream = stream
         this.lastWrite = write
+
+        if (this.counter > MAX_TEMP_FILES) {
+          throw new Error('Too many temp files')
+        }
 
         ranges.push(write)
       }
@@ -290,5 +310,16 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     const index = this.counter.toString().padStart(6, '0')
     this.counter += 1
     return `${index}-${sanitized}.bin`
+  }
+
+  private async closeLastWriteStream() {
+    if (!this.lastWriteStream) return
+
+    const stream = this.lastWriteStream
+    this.lastWriteStream = null
+    this.lastWrite = null
+
+    stream.close()
+    await finished(stream)
   }
 }
