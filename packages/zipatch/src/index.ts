@@ -29,6 +29,7 @@ export {
   type FileRange,
   FileSystem,
   VirtualFileSystem,
+  type VirtualFileSystemState,
   type ZipatchFileSystem,
 } from './fs'
 

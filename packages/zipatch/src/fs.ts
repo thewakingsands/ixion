@@ -4,8 +4,15 @@ import {
   type WriteStream,
   writeFileSync,
 } from 'node:fs'
-import { type FileHandle, mkdir, open, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import {
+  type FileHandle,
+  mkdir,
+  open,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { finished } from 'node:stream/promises'
 import $debug from 'debug'
 
@@ -40,6 +47,12 @@ export interface EraseFileRange extends FileRangeBase {
 }
 
 export type FileRange = WriteFileRange | EraseFileRange
+export type VirtualFileSystemStateRange = FileRange
+
+export interface VirtualFileSystemState {
+  counter: number
+  ranges: Array<[string, VirtualFileSystemStateRange[]]>
+}
 
 export interface ZipatchFileSystem {
   workspace: string
@@ -193,6 +206,10 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     return this.root
   }
 
+  private get statePath() {
+    return join(this.root, 'state.json')
+  }
+
   async close(): Promise<void> {
     await this.closeLastWriteStream()
   }
@@ -237,7 +254,69 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     )
   }
 
+  async saveState(): Promise<VirtualFileSystemState> {
+    await this.closeLastWriteStream()
+
+    const state: VirtualFileSystemState = {
+      counter: this.counter,
+      ranges: [...this.ranges.entries()].map(([path, ranges]) => [
+        path,
+        ranges.map((range) =>
+          range.type === 'write'
+            ? {
+                ...range,
+                dataPath: relative(this.root, range.dataPath),
+              }
+            : { ...range },
+        ),
+      ]),
+    }
+
+    await mkdir(this.root, { recursive: true })
+    await writeFile(this.statePath, `${JSON.stringify(state, null, 2)}\n`)
+
+    return state
+  }
+
+  async loadState(state?: VirtualFileSystemState): Promise<void> {
+    await this.closeLastWriteStream()
+
+    const nextState =
+      state ??
+      (existsSync(this.statePath)
+        ? (JSON.parse(
+            await readFile(this.statePath, 'utf-8'),
+          ) as VirtualFileSystemState)
+        : null)
+
+    if (!nextState) {
+      this.ranges.clear()
+      this.counter = 0
+      return
+    }
+
+    this.ranges = new Map(
+      nextState.ranges.map(([path, ranges]) => [
+        path,
+        ranges.map((range) =>
+          range.type === 'write'
+            ? {
+                ...range,
+                dataPath: isAbsolute(range.dataPath)
+                  ? range.dataPath
+                  : join(this.root, range.dataPath),
+              }
+            : { ...range },
+        ),
+      ]),
+    )
+
+    this.counter = Math.max(nextState.counter, this.getNextCounterFromRanges())
+  }
+
   async clear() {
+    await this.closeLastWriteStream()
+
     for (const ranges of this.ranges.values()) {
       for (const range of ranges) {
         if (range.type === 'write' && range.dataPath) {
@@ -310,6 +389,27 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     const index = this.counter.toString().padStart(6, '0')
     this.counter += 1
     return `${index}-${sanitized}.bin`
+  }
+
+  private getNextCounterFromRanges() {
+    let nextCounter = 0
+
+    for (const ranges of this.ranges.values()) {
+      for (const range of ranges) {
+        if (range.type !== 'write') {
+          continue
+        }
+
+        const match = basename(range.dataPath).match(/^(\d+)-/)
+        if (!match) {
+          continue
+        }
+
+        nextCounter = Math.max(nextCounter, Number.parseInt(match[1], 10) + 1)
+      }
+    }
+
+    return nextCounter
   }
 
   private async closeLastWriteStream() {

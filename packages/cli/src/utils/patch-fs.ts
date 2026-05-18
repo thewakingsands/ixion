@@ -1,11 +1,15 @@
-import { readFile as readBuffer } from 'node:fs/promises'
+import { mkdir, readFile as readBuffer, rm } from 'node:fs/promises'
 import { VirtualFileSystem, ZipatchReader } from '@ffcafe/ixion-zipatch'
 
 const MAX_IN_MEMORY_FILE_SIZE = 10 * 1024 * 1024
 export class PatchFileSystem {
   private fs: VirtualFileSystem
+  private root: string
+  private allowList?: string[]
 
   constructor(root: string, allowList?: string[]) {
+    this.root = root
+    this.allowList = allowList
     this.fs = new VirtualFileSystem(root, allowList)
   }
 
@@ -79,5 +83,11 @@ export class PatchFileSystem {
 
     // cannot fulfill the request
     return null
+  }
+
+  async clear() {
+    await rm(this.root, { recursive: true, force: true })
+    await mkdir(this.root, { recursive: true })
+    this.fs = new VirtualFileSystem(this.root, this.allowList)
   }
 }
