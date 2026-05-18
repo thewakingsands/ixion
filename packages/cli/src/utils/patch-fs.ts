@@ -2,29 +2,23 @@ import { mkdir, readFile as readBuffer, rm } from 'node:fs/promises'
 import { VirtualFileSystem, ZipatchReader } from '@ffcafe/ixion-zipatch'
 
 const MAX_IN_MEMORY_FILE_SIZE = 10 * 1024 * 1024
-export class PatchFileSystem {
-  private fs: VirtualFileSystem
-  private root: string
-  private allowList?: string[]
-
+export class PatchFileSystem extends VirtualFileSystem {
   constructor(root: string, allowList?: string[]) {
-    this.root = root
-    this.allowList = allowList
-    this.fs = new VirtualFileSystem(root, allowList)
+    super(root, allowList)
   }
 
   async applyPatch(patchPath: string) {
     const reader = await ZipatchReader.open(patchPath)
 
     try {
-      await reader.apply(this.fs)
+      await reader.apply(this)
     } finally {
       await reader.close()
     }
   }
 
   async readFile(path: string, start = 0, end?: number) {
-    const ranges = this.fs.getFileRanges(path)
+    const ranges = this.getFileRanges(path)
     if (!ranges) {
       return null
     }
@@ -83,11 +77,5 @@ export class PatchFileSystem {
 
     // cannot fulfill the request
     return null
-  }
-
-  async clear() {
-    await rm(this.root, { recursive: true, force: true })
-    await mkdir(this.root, { recursive: true })
-    this.fs = new VirtualFileSystem(this.root, this.allowList)
   }
 }
