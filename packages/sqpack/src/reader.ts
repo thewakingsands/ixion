@@ -25,12 +25,14 @@ const debug = $debug('ixion:sqpack:reader')
 const uncompressedChunk = 32000
 
 export interface SqPackFileReader {
-  read<T extends NodeJS.ArrayBufferView>(
-    buffer: T,
+  read(
+    buffer: Buffer,
     offset?: number,
     length?: number,
     position?: number,
   ): Promise<unknown>
+
+  readFile(): Promise<Buffer>
   close(): Promise<unknown>
 }
 
@@ -100,7 +102,10 @@ export class SqPackReader {
     const ext = useIndex2 ? 'index2' : 'index'
     const indexPath = `${this.options.prefix}.${ext}`
 
-    const data = await readFile(indexPath)
+    const handle = await this.openHandler(indexPath)
+    const data = await handle.readFile()
+    await handle.close()
+
     const { indexEntries } = readIndexEntries(data, useIndex2)
     this.indexEntries = indexEntries
   }
