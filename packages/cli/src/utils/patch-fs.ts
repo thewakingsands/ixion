@@ -1,4 +1,4 @@
-import { mkdir, readFile as readBuffer, rm } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import { VirtualFileSystem, ZipatchReader } from '@ffcafe/ixion-zipatch'
 
 const MAX_IN_MEMORY_FILE_SIZE = 10 * 1024 * 1024
@@ -62,10 +62,14 @@ export class PatchFileSystem extends VirtualFileSystem {
           continue
         }
 
-        const data = await readBuffer(range.dataPath)
         const dataStart = range.offset + (overlapStart - range.start)
-        const dataEnd = range.offset + (overlapEnd - range.start)
-        data.copy(buffer, overlapStart - start, dataStart, dataEnd)
+        const dataLength = overlapEnd - overlapStart
+        const file = await open(range.dataPath, 'r')
+        try {
+          await file.read(buffer, overlapStart - start, dataLength, dataStart)
+        } finally {
+          await file.close()
+        }
       }
 
       if (nextPendingRanges.length === 0) {
