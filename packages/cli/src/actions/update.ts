@@ -1,7 +1,7 @@
 import type { PatchEntry } from '@ffcafe/ixion-server'
-import { servers } from '@ffcafe/ixion-server'
 import { bootVersion } from '../config.js'
 import { downloadPatch } from '../utils/download.js'
+import { requestServerPatches } from '../utils/server.js'
 import { getStorageManager } from '../utils/storage.js'
 import { createVersionFromPatches } from './create-version'
 import { CurrentVersion } from './current-version'
@@ -25,11 +25,6 @@ export const updateCommand = async (
   try {
     console.log('🔍 Checking current version...')
 
-    const server = servers[options.server as keyof typeof servers]
-    if (!server) {
-      throw new Error(`Unknown server: ${options.server}`)
-    }
-
     // Create storage manager from config
     let storageManager = getStorageManager()
     if (options.storage) {
@@ -52,9 +47,7 @@ export const updateCommand = async (
       console.log(`Current FFXIV version: ${currentVersion.ffxiv}`)
     }
 
-    console.log(
-      `📡 Fetching patch list from ${options.server} server (${server.displayName})...`,
-    )
+    console.log(`📡 Fetching patch list from ${options.server} server ...`)
 
     // Convert CurrentVersion to GameVersions format
     const gameVersions = {
@@ -63,9 +56,8 @@ export const updateCommand = async (
       expansions: currentVersion.expansions,
     }
 
-    const allPatches = await server.request(gameVersions)
-
-    if (allPatches.length === 0) {
+    const patches = await requestServerPatches(options.server, gameVersions)
+    if (patches.count === 0) {
       console.log('✅ No updates available')
       return {
         updated: false,
@@ -74,15 +66,8 @@ export const updateCommand = async (
       }
     }
 
-    // Separate FFXIV patches from expansion patches
-    const ffxivPatches = allPatches.filter(
-      (patch) => patch.expansion === 'ffxiv',
-    )
-    const expansionPatches = allPatches.filter(
-      (patch) => patch.expansion !== 'ffxiv',
-    )
-
-    console.log(`Found ${allPatches.length} total patches:`)
+    const { ffxivPatches, expansionPatches } = patches
+    console.log(`Found ${patches.count} total patches:`)
     console.log(`  - FFXIV patches: ${ffxivPatches.length}`)
     console.log(`  - Expansion patches: ${expansionPatches.length}`)
 
