@@ -63,8 +63,8 @@ export class PatchFileSystem extends VirtualFileSystem {
         }
 
         const data = await readBuffer(range.dataPath)
-        const dataStart = overlapStart - range.start
-        const dataEnd = overlapEnd - range.start
+        const dataStart = range.offset + (overlapStart - range.start)
+        const dataEnd = range.offset + (overlapEnd - range.start)
         data.copy(buffer, overlapStart - start, dataStart, dataEnd)
       }
 

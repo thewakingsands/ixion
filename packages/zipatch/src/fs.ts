@@ -19,6 +19,7 @@ import $debug from 'debug'
 const debug = $debug('zipatch:fs')
 const zeroBuffer = Buffer.alloc(1024, 0)
 const MAX_TEMP_FILES = 1000
+const MAX_TEMP_FILE_SIZE = 128 * 1024 * 1024
 
 const isPathAllowed = (path: string, allowList: string[]) => {
   return (
@@ -40,6 +41,7 @@ export interface FileRangeBase {
 export interface WriteFileRange extends FileRangeBase {
   type: 'write'
   dataPath: string
+  offset: number
 }
 
 export interface EraseFileRange extends FileRangeBase {
@@ -195,6 +197,8 @@ export class VirtualFileSystem implements ZipatchFileSystem {
   private counter = 0
   private ranges = new Map<string, FileRange[]>()
   private lastWrite: WriteFileRange | null = null
+  private lastWritePath: string | null = null
+  private lastWriteSize = 0
   private lastWriteStream: WriteStream | null = null
 
   constructor(
@@ -312,18 +316,15 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     )
 
     this.counter = Math.max(nextState.counter, this.getNextCounterFromRanges())
+    this.lastWrite = null
+    this.lastWritePath = null
+    this.lastWriteSize = 0
   }
 
   async clear() {
     await this.closeLastWriteStream()
 
-    for (const ranges of this.ranges.values()) {
-      for (const range of ranges) {
-        if (range.type === 'write' && range.dataPath) {
-          await rm(range.dataPath)
-        }
-      }
-    }
+    // keep the blob files for debugging purpose
 
     this.ranges.clear()
   }
@@ -343,42 +344,58 @@ export class VirtualFileSystem implements ZipatchFileSystem {
       await mkdir(this.root, { recursive: true })
 
       if (
-        this.lastWrite?.path === path &&
-        start === this.lastWrite.end &&
-        this.lastWriteStream
+        this.lastWrite &&
+        this.lastWriteStream &&
+        this.lastWrite.path === path &&
+        this.lastWrite.end === start &&
+        this.lastWrite.dataPath === this.lastWritePath
       ) {
-        debug('[record] append %s, start=%d, end=%d', path, start, end)
-        this.lastWriteStream.write(data)
-        this.lastWrite.end = end
-      } else {
-        const fileName = this.createTempFileName(path)
-        const dataPath = join(this.root, fileName)
-
-        await this.closeLastWriteStream()
-
         debug(
-          '[record] write %s, file=%s, start=%d, end=%d',
+          '[record] append %s, file=%s, start=%d, end=%d, dataOffset=%d',
           path,
-          fileName,
+          basename(this.lastWrite.dataPath),
           start,
           end,
+          this.lastWrite.offset + (this.lastWrite.end - this.lastWrite.start),
         )
-        const stream = createWriteStream(dataPath)
-        stream.write(data)
-
-        const write = { type: 'write', path, dataPath, start, end } as const
-        this.lastWriteStream = stream
-        this.lastWrite = write
-
-        if (this.counter > MAX_TEMP_FILES) {
-          throw new Error('Too many temp files')
-        }
-
-        ranges.push(write)
+        this.lastWriteStream.write(data)
+        this.lastWrite.end = end
+        this.lastWriteSize += data.length
+        this.ranges.set(path, ranges)
+        return
       }
+
+      const writableTemp = await this.getWritableTempFile(path, data.length)
+      debug(
+        '[record] write %s, file=%s, start=%d, end=%d, dataOffset=%d',
+        path,
+        basename(writableTemp.dataPath),
+        start,
+        end,
+        writableTemp.offset,
+      )
+      writableTemp.stream.write(data)
+      this.lastWritePath = writableTemp.dataPath
+      this.lastWriteSize = writableTemp.offset + data.length
+
+      if (this.counter > MAX_TEMP_FILES) {
+        throw new Error('Too many temp files')
+      }
+
+      const write = {
+        type: 'write',
+        path,
+        dataPath: writableTemp.dataPath,
+        offset: writableTemp.offset,
+        start,
+        end,
+      } as const
+      ranges.push(write)
+      this.lastWrite = write
     } else {
       debug('[record] erase %s, start=%d, end=%d', path, start, end)
       ranges.push({ type: 'erase', path, start, end })
+      this.lastWrite = null
     }
 
     this.ranges.set(path, ranges)
@@ -389,6 +406,34 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     const index = this.counter.toString().padStart(6, '0')
     this.counter += 1
     return `${index}-${sanitized}.bin`
+  }
+
+  private async getWritableTempFile(path: string, length: number) {
+    if (
+      this.lastWritePath &&
+      this.lastWriteStream &&
+      this.lastWriteSize + length <= MAX_TEMP_FILE_SIZE
+    ) {
+      return {
+        dataPath: this.lastWritePath,
+        offset: this.lastWriteSize,
+        stream: this.lastWriteStream,
+      }
+    }
+
+    const fileName = this.createTempFileName(path)
+    const dataPath = join(this.root, fileName)
+    await this.closeLastWriteStream()
+    const stream = createWriteStream(dataPath)
+    this.lastWriteStream = stream
+    this.lastWritePath = dataPath
+    this.lastWriteSize = 0
+
+    return {
+      dataPath,
+      offset: 0,
+      stream,
+    }
   }
 
   private getNextCounterFromRanges() {
@@ -418,6 +463,8 @@ export class VirtualFileSystem implements ZipatchFileSystem {
     const stream = this.lastWriteStream
     this.lastWriteStream = null
     this.lastWrite = null
+    this.lastWritePath = null
+    this.lastWriteSize = 0
 
     stream.close()
     await finished(stream)
