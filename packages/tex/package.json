@@ -1,0 +1,33 @@
+{
+  "name": "@ffcafe/ixion-tex",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "Cargo.toml",
+    "build.rs",
+    "src",
+    "*.node"
+  ],
+  "napi": {
+    "binaryName": "ixion-tex"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "dev": "napi build --platform",
+    "lint": "cargo fmt --check",
+    "test": "cargo test"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  }
+}
