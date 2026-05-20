@@ -3,10 +3,6 @@ import { VirtualFileSystem, ZipatchReader } from '@ffcafe/ixion-zipatch'
 
 const MAX_IN_MEMORY_FILE_SIZE = 10 * 1024 * 1024
 export class PatchFileSystem extends VirtualFileSystem {
-  constructor(root: string, allowList?: string[]) {
-    super(root, allowList)
-  }
-
   async applyPatch(patchPath: string) {
     const reader = await ZipatchReader.open(patchPath)
 

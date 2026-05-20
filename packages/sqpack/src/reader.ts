@@ -1,4 +1,4 @@
-import { open, readFile } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import { inflateRawSync } from 'node:zlib'
 import $debug from 'debug'
 import { SmartBuffer } from 'smart-buffer'

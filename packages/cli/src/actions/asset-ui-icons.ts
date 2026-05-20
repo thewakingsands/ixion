@@ -445,25 +445,6 @@ function generateIconFileNames(dirPath: string) {
   return fileNames
 }
 
-function sameResolvedFileIndex(
-  left: ResolvedDirectoryIndex['files'] extends Map<bigint, infer TValue>
-    ? TValue | null
-    : never,
-  right: ResolvedDirectoryIndex['files'] extends Map<bigint, infer TValue>
-    ? TValue | null
-    : never,
-) {
-  if (left === right) {
-    return true
-  }
-
-  if (!left || !right) {
-    return false
-  }
-
-  return left.dataFileId === right.dataFileId && left.offset === right.offset
-}
-
 function serializeResolvedIndexMap(
   resolvedIndexMap: Map<number, ResolvedDirectoryIndex>,
 ) {

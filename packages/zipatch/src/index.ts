@@ -9,7 +9,7 @@ import {
   type ZipatchPreloadData,
   type ZipatchPreloadedChunk,
 } from './datasource'
-import { FileSystem, VirtualFileSystem, type ZipatchFileSystem } from './fs'
+import { FileSystem, type ZipatchFileSystem } from './fs'
 import type { ZipatchChunk, ZipatchContext } from './interface'
 
 const zipatchMagic = [
