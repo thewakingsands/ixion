@@ -14,6 +14,10 @@ on:
         description: "Force release"
         default: false
         type: boolean
+      allow_missing_remote_version:
+        description: "Allow CI update to continue without a remote version baseline"
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -53,9 +57,10 @@ jobs:
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
           MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
           FORCE_RELEASE: ${{ inputs.force_release && '--force-release' || '' }}
+          ALLOW_MISSING_REMOTE_VERSION: ${{ inputs.allow_missing_remote_version && '--allow-missing-remote-version' || '' }}
         run: |
           node packages/cli/dist/index.js ci init
-          node packages/cli/dist/index.js ci update ${{ env.FORCE_RELEASE }}
+          node packages/cli/dist/index.js ci update ${{ env.FORCE_RELEASE }} ${{ env.ALLOW_MISSING_REMOTE_VERSION }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

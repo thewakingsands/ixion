@@ -14,12 +14,23 @@ export const registerCiCommand = (program: Command) => {
     .description('Update game to the latest version')
     .option('-s, --skip-update', 'Skip update')
     .option('-f, --force-release', 'Force release')
-    .action(async (options: { skipUpdate: boolean; forceRelease: boolean }) => {
-      return ciUpdateCommand({
-        skipUpdate: options.skipUpdate,
-        forceRelease: options.forceRelease,
-      })
-    })
+    .option(
+      '--allow-missing-remote-version',
+      'Allow CI to continue even when a remote version baseline is missing',
+    )
+    .action(
+      async (options: {
+        skipUpdate: boolean
+        forceRelease: boolean
+        allowMissingRemoteVersion: boolean
+      }) => {
+        return ciUpdateCommand({
+          skipUpdate: options.skipUpdate,
+          forceRelease: options.forceRelease,
+          allowMissingRemoteVersion: options.allowMissingRemoteVersion,
+        })
+      },
+    )
 
   return ciCmd
 }

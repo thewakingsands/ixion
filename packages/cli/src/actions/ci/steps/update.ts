@@ -5,8 +5,10 @@ import { serversToCheck } from '../constants'
 export async function checkAndUpdateVersions(
   storageManager: StorageManager,
   skipUpdate = false,
+  allowMissingRemoteVersion = false,
 ): Promise<Record<string, string>> {
   const currentVersions: Record<string, string> = {}
+  const missingRemoteServers: string[] = []
   console.log('\n📡 Checking remote versions...')
   for (const serverName of serversToCheck) {
     const remoteVersion = await storageManager.getLatestVersion(serverName)
@@ -15,7 +17,14 @@ export async function checkAndUpdateVersions(
       currentVersions[serverName] = remoteVersion
     } else {
       console.log(`  ${serverName}: No remote version found`)
+      missingRemoteServers.push(serverName)
     }
+  }
+
+  if (missingRemoteServers.length > 0 && !allowMissingRemoteVersion) {
+    throw new Error(
+      `Missing remote version for ${missingRemoteServers.join(', ')}. Refusing to continue without a remote version baseline. Re-run with --allow-missing-remote-version if this is intentional.`,
+    )
   }
 
   // Step 3: Run update for both servers

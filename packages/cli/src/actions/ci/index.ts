@@ -6,9 +6,11 @@ import { checkAndUpdateVersions } from './steps/update'
 export const ciUpdateCommand = async ({
   skipUpdate = false,
   forceRelease = false,
+  allowMissingRemoteVersion = false,
 }: {
   skipUpdate?: boolean
   forceRelease?: boolean
+  allowMissingRemoteVersion?: boolean
 }) => {
   try {
     console.log('🔍 Running CI actions...')
@@ -20,6 +22,7 @@ export const ciUpdateCommand = async ({
     const currentVersions = await checkAndUpdateVersions(
       storageManager,
       skipUpdate,
+      allowMissingRemoteVersion,
     )
 
     // Step 3: Check if versions changed and create releases
