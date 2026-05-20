@@ -13,25 +13,34 @@ import { sortVersions, versionRegex } from '@ffcafe/ixion-utils'
 import {
   AbstractStorage,
   type StorageConfig,
+  type StoragePathMap,
   type VersionData,
 } from '../abstract.js'
 
 export interface LocalStorageConfig {
   rootPath: string
+  paths?: StoragePathMap
 }
 
 export class LocalStorage extends AbstractStorage {
-  private rootPath: string
+  private versionsRootPath: string
 
   constructor(config: StorageConfig) {
     super(config)
     const localConfig = config.config as LocalStorageConfig
-    this.rootPath = localConfig.rootPath
+    this.versionsRootPath = join(
+      localConfig.rootPath,
+      localConfig.paths?.versions || '',
+    )
   }
 
   async readCurrentVersion(server: string): Promise<VersionData | null> {
     try {
-      const currentJsonPath = join(this.rootPath, server, 'current.json')
+      const currentJsonPath = join(
+        this.versionsRootPath,
+        server,
+        'current.json',
+      )
       if (!existsSync(currentJsonPath)) {
         return null
       }
@@ -51,7 +60,7 @@ export class LocalStorage extends AbstractStorage {
   ): Promise<void> {
     try {
       // Ensure root directory exists
-      const serverPath = join(this.rootPath, server)
+      const serverPath = join(this.versionsRootPath, server)
       mkdirSync(serverPath, { recursive: true })
 
       const currentJsonPath = join(serverPath, 'current.json')
@@ -64,13 +73,13 @@ export class LocalStorage extends AbstractStorage {
   }
 
   async hasVersion(server: string, version: string): Promise<boolean> {
-    const versionPath = join(this.rootPath, server, version)
+    const versionPath = join(this.versionsRootPath, server, version)
     return existsSync(versionPath) && statSync(versionPath).isDirectory()
   }
 
   async listVersions(server: string): Promise<string[]> {
     try {
-      const serverPath = join(this.rootPath, server)
+      const serverPath = join(this.versionsRootPath, server)
       if (!existsSync(serverPath)) {
         return []
       }
@@ -90,7 +99,7 @@ export class LocalStorage extends AbstractStorage {
     version: string,
     targetPath: string,
   ): Promise<void> {
-    const sourcePath = join(this.rootPath, server, version)
+    const sourcePath = join(this.versionsRootPath, server, version)
 
     if (!existsSync(sourcePath)) {
       throw new Error(`Version ${version} not found in local storage`)
@@ -117,7 +126,7 @@ export class LocalStorage extends AbstractStorage {
     }
 
     try {
-      const targetPath = join(this.rootPath, server, version)
+      const targetPath = join(this.versionsRootPath, server, version)
 
       // Ensure target directory exists
       mkdirSync(targetPath, { recursive: true })
@@ -130,7 +139,7 @@ export class LocalStorage extends AbstractStorage {
   }
 
   async deleteVersion(server: string, version: string): Promise<void> {
-    const versionPath = join(this.rootPath, server, version)
+    const versionPath = join(this.versionsRootPath, server, version)
 
     if (!existsSync(versionPath)) {
       throw new Error(`Version ${version} not found in local storage`)
@@ -146,10 +155,10 @@ export class LocalStorage extends AbstractStorage {
   async healthCheck(): Promise<boolean> {
     try {
       // Try to create the root directory if it doesn't exist
-      mkdirSync(this.rootPath, { recursive: true })
+      mkdirSync(this.versionsRootPath, { recursive: true })
 
       // Try to read the directory
-      readdirSync(this.rootPath)
+      readdirSync(this.versionsRootPath)
       return true
     } catch (error) {
       console.warn('⚠️ Local storage health check failed:', error)

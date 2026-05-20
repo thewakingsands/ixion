@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { join } from 'node:path'
+import { resolveLocalStoragePath } from './config'
 
 export function getWorkingDir() {
   const cwd = process.cwd()
@@ -13,8 +14,7 @@ export function getWorkingDir() {
 }
 
 export function getVersionDir(version: string) {
-  const cwd = getWorkingDir()
-  return join(cwd, 'versions', version)
+  return resolveLocalStoragePath('versions', version)
 }
 
 export async function getTempDir() {

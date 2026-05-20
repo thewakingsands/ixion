@@ -1,9 +1,20 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { StorageConfig } from '@ffcafe/ixion-storage'
 import { defaultConfigPath } from '../config'
 
 export interface IxionConfig {
   storages: StorageConfig[]
+}
+
+interface LocalStoragePathMap {
+  versions?: string
+  [key: string]: string | undefined
+}
+
+interface LocalStorageConfig {
+  rootPath: string
+  paths?: LocalStoragePathMap
 }
 
 /**
@@ -70,4 +81,23 @@ export function getDefaultConfigPath(): string {
 export function configExists(configPath?: string): boolean {
   const finalConfigPath = configPath || getDefaultConfigPath()
   return existsSync(finalConfigPath)
+}
+
+export function resolveLocalStoragePath(
+  pathKey: string,
+  ...segments: string[]
+): string {
+  const config = readConfig()
+  const localStorage = config.storages.find(
+    (storage) => storage.type === 'local',
+  )
+  const localConfig = localStorage?.config as LocalStorageConfig | undefined
+
+  const rootPath = localConfig?.rootPath || './versions'
+  const relativePath =
+    pathKey === 'versions'
+      ? localConfig?.paths?.versions || ''
+      : localConfig?.paths?.[pathKey] || pathKey
+
+  return resolve(process.cwd(), rootPath, relativePath, ...segments)
 }

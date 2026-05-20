@@ -7,6 +7,11 @@ export interface VersionData {
   ex5?: string
 }
 
+export interface StoragePathMap {
+  versions?: string
+  [key: string]: string | undefined
+}
+
 export interface StorageConfig {
   name: string
   type: 'local' | 'minio'

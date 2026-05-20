@@ -4,7 +4,11 @@
       "name": "local",
       "type": "local",
       "config": {
-        "rootPath": "./versions"
+        "rootPath": "./storage",
+        "paths": {
+          "versions": "versions",
+          "ui": "ui"
+        }
       }
     },
     {
@@ -18,7 +22,11 @@
         "secretKey": "minioadmin",
         "bucketName": "ixion-versions",
         "region": "us-east-1",
-        "prefix": "ffxiv/"
+        "prefix": "ffxiv",
+        "paths": {
+          "versions": "versions",
+          "ui": "ui"
+        }
       }
     }
   ]

@@ -8,6 +8,7 @@ import { Client } from 'minio'
 import {
   AbstractStorage,
   type StorageConfig,
+  type StoragePathMap,
   type VersionData,
 } from '../abstract.js'
 
@@ -20,18 +21,21 @@ export interface MinioStorageConfig {
   bucketName: string
   region?: string
   prefix?: string
+  paths?: StoragePathMap
 }
 
 export class MinioStorage extends AbstractStorage {
   private client: Client
   private bucketName: string
   private prefix: string
+  private versionsPath: string
 
   constructor(config: StorageConfig) {
     super(config)
     const minioConfig = config.config as MinioStorageConfig
     this.bucketName = minioConfig.bucketName
-    this.prefix = minioConfig.prefix || ''
+    this.prefix = trimStorageSegment(minioConfig.prefix || '')
+    this.versionsPath = trimStorageSegment(minioConfig.paths?.versions || '')
 
     this.client = new Client({
       endPoint: minioConfig.endPoint,
@@ -47,7 +51,13 @@ export class MinioStorage extends AbstractStorage {
    * Build object name with prefix
    */
   private getObjectName(server: string, name: string): string {
-    return `${this.prefix || ''}${server}/${name}`
+    return [this.prefix, this.versionsPath, server, name]
+      .filter(Boolean)
+      .join('/')
+  }
+
+  private getServerPrefix(server: string): string {
+    return [this.prefix, this.versionsPath, server].filter(Boolean).join('/')
   }
 
   async readCurrentVersion(server: string): Promise<VersionData | null> {
@@ -132,7 +142,7 @@ export class MinioStorage extends AbstractStorage {
   async listVersions(server: string): Promise<string[]> {
     try {
       const versions = new Set<string>()
-      const searchPrefix = this.getObjectName(server, '')
+      const searchPrefix = this.getServerPrefix(server)
 
       const objects = this.client.listObjects(
         this.bucketName,
@@ -142,14 +152,8 @@ export class MinioStorage extends AbstractStorage {
 
       for await (const obj of objects) {
         if (obj.name) {
-          // Remove the prefix from the object name for processing
-          const relativeName = this.prefix
-            ? obj.name.substring(this.prefix.length + 1)
-            : obj.name
-
-          // Extract version from zip file name (e.g., "server/2025.07.28.0000.0000.zip" -> "2025.07.28.0000.0000")
-          const match = relativeName.match(
-            /^[^/]+\/(\w*\d{4}\.\d{2}\.\d{2}\.\d{4}\.\d{4}\w*)\.zip$/,
+          const match = obj.name.match(
+            new RegExp(`^${escapeRegExp(searchPrefix)}\\/(.+)\\.zip$`),
           )
           if (match) {
             versions.add(match[1])
@@ -248,4 +252,12 @@ export class MinioStorage extends AbstractStorage {
       return false
     }
   }
+}
+
+function trimStorageSegment(value: string): string {
+  return value.replace(/^\/+|\/+$/g, '')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

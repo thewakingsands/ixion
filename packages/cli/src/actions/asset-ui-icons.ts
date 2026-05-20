@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readIndexEntries, SqPackReader } from '@ffcafe/ixion-sqpack'
 import { baseGameVersion, bootVersion, uiSqPackFile } from '../config'
+import { resolveLocalStoragePath } from '../utils/config'
 import { downloadPatch } from '../utils/download'
 import { PatchFileSystem } from '../utils/patch-fs'
 import { getWorkingDir } from '../utils/root'
@@ -144,7 +145,6 @@ export async function resolveSavedUiIconState(
   options: AssetUiIconsStateOptions,
 ): Promise<void> {
   const { assetRoot, pendingDiffRoot } = getUiIconPaths(options.server)
-  const outputName = options.output || 'saved-state'
 
   const fs = new PatchFileSystem(pendingDiffRoot, allowList)
   await fs.loadState()
@@ -314,8 +314,7 @@ async function loadIconState(stateIconsPath: string) {
 }
 
 function getUiIconPaths(server: string) {
-  const cwd = getWorkingDir()
-  const outputRoot = join(cwd, 'versions', `${server}-assets`, 'ui')
+  const outputRoot = resolveLocalStoragePath('ui', server)
   const patchOutputRoot = join(outputRoot, 'patches')
   const assetRoot = join(outputRoot, 'assets')
   const pendingDiffRoot = join(outputRoot, '.diff')
