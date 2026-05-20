@@ -13,4 +13,4 @@ temp-*
 .ci/sqpack
 
 outputs
-versions
+/storage
