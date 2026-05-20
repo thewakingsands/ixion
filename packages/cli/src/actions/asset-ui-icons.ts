@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readIndexEntries, SqPackReader } from '@ffcafe/ixion-sqpack'
 import { baseGameVersion, bootVersion, uiSqPackFile } from '../config'
@@ -13,6 +14,9 @@ import {
   type ResolvedDirectoryIndex,
   resolveIndexMap,
 } from '../utils/sqpack-index'
+
+const require = createRequire(import.meta.filename)
+const { formatTex } = require('@ffcafe/ixion-tex')
 
 const sqpackHeaderSize = 0x400
 const indexHeaderSize = 0x400
@@ -33,13 +37,16 @@ interface IconEntry {
   version: string
   hr: boolean
   sha256: string
-  format: 'tex'
+  format: AssetFormat
   path: string
 }
 
 interface ValidatedIndex {
   resolvedIndexMap: Map<number, ResolvedDirectoryIndex>
 }
+
+type EncodedAssetFormat = 'webp' | 'avif'
+type AssetFormat = EncodedAssetFormat | 'tex'
 
 export async function extractUiPatchIcons(
   options: AssetUiIconsOptions,
@@ -239,15 +246,19 @@ async function processTextures(options: {
       }
 
       const sha256 = createHash('sha256').update(nextData).digest('hex')
-      if (previous && sha256 === previous.sha256) {
+      if (previous && sha256 === previous.sha256 && previous.format !== 'tex') {
         // Same as previous
         continue
       }
 
-      await persistAsset(options.assetRoot, sha256, nextData)
+      const encoded = await formatTex(nextData, {
+        format: 'auto',
+      })
+      const format = encoded.format as EncodedAssetFormat
+      await persistAsset(options.assetRoot, sha256, format, encoded.data)
       increaseWriteCount()
 
-      const nextEntry = createIconStateEntry(path, sha256)
+      const nextEntry = createIconStateEntry(path, sha256, format)
 
       if (previous) {
         // update
@@ -371,7 +382,11 @@ function* iterateFiles(
   }
 }
 
-function createIconStateEntry(path: string, sha256: string): IconEntry {
+function createIconStateEntry(
+  path: string,
+  sha256: string,
+  format: EncodedAssetFormat,
+): IconEntry {
   const match = path.match(
     /^ui\/icon\/(\d{3})000(\/(?:en|ja|fr|de|hq|chs))?\/(\d{6})(_hr1)?\.tex$/,
   )
@@ -384,7 +399,7 @@ function createIconStateEntry(path: string, sha256: string): IconEntry {
     version: match[2] ?? '',
     hr: Boolean(match[4]),
     sha256,
-    format: 'tex',
+    format,
     path,
   }
 }
@@ -472,9 +487,14 @@ function serializeResolvedIndexMap(
     }))
 }
 
-async function persistAsset(assetRoot: string, sha256: string, data: Buffer) {
+async function persistAsset(
+  assetRoot: string,
+  sha256: string,
+  format: EncodedAssetFormat,
+  data: Buffer,
+) {
   const dir = join(assetRoot, sha256.slice(0, 2))
-  const path = join(dir, sha256)
+  const path = join(dir, `${sha256}.${format}`)
   if (existsSync(path)) {
     const existing = await stat(path)
     if (existing.size === data.length) {

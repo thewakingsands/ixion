@@ -32,6 +32,7 @@
     "@ffcafe/ixion-server": "workspace:*",
     "@ffcafe/ixion-sqpack": "workspace:*",
     "@ffcafe/ixion-storage": "workspace:*",
+    "@ffcafe/ixion-tex": "workspace:*",
     "@ffcafe/ixion-utils": "workspace:*",
     "@ffcafe/ixion-zipatch": "workspace:*",
     "@octokit/auth-action": "^6.0.2",

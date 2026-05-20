@@ -79,6 +79,9 @@ importers:
       '@ffcafe/ixion-storage':
         specifier: workspace:*
         version: link:../storage
+      '@ffcafe/ixion-tex':
+        specifier: workspace:*
+        version: link:../tex
       '@ffcafe/ixion-utils':
         specifier: workspace:*
         version: link:../utils
