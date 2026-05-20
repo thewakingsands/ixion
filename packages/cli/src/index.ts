@@ -1,4 +1,5 @@
 import { Command } from 'commander'
+import { registerAssetCommand } from './commands/asset'
 import { registerCiCommand } from './commands/ci'
 import { registerExdCommand } from './commands/exd'
 import { registerPatchCommand } from './commands/patch'
@@ -10,6 +11,7 @@ const program = new Command()
 
 program.name('ixion').description('CLI to FFXIV Patches').version('0.8.0')
 
+registerAssetCommand(program)
 registerCiCommand(program)
 registerExdCommand(program)
 registerPatchCommand(program)
