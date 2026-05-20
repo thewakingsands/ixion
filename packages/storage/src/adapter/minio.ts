@@ -28,6 +28,7 @@ export class MinioStorage extends AbstractStorage {
   private client: Client
   private bucketName: string
   private prefix: string
+  private paths?: StoragePathMap
   private versionsPath: string
 
   constructor(config: StorageConfig) {
@@ -35,6 +36,7 @@ export class MinioStorage extends AbstractStorage {
     const minioConfig = config.config as MinioStorageConfig
     this.bucketName = minioConfig.bucketName
     this.prefix = trimStorageSegment(minioConfig.prefix || '')
+    this.paths = minioConfig.paths
     this.versionsPath = trimStorageSegment(minioConfig.paths?.versions || '')
 
     this.client = new Client({
@@ -58,6 +60,12 @@ export class MinioStorage extends AbstractStorage {
 
   private getServerPrefix(server: string): string {
     return [this.prefix, this.versionsPath, server].filter(Boolean).join('/')
+  }
+
+  private getPathPrefix(server: string, pathKey: string): string {
+    return [this.prefix, this.getPathSegment(pathKey), server]
+      .filter(Boolean)
+      .join('/')
   }
 
   async readCurrentVersion(server: string): Promise<VersionData | null> {
@@ -113,6 +121,105 @@ export class MinioStorage extends AbstractStorage {
       throw new Error(
         `Failed to write current version to MinIO storage: ${error}`,
       )
+    }
+  }
+
+  async readFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null> {
+    try {
+      const objectName = [
+        this.getPathPrefix(server, pathKey),
+        trimStorageSegment(relativePath),
+      ]
+        .filter(Boolean)
+        .join('/')
+
+      try {
+        await this.client.statObject(this.bucketName, objectName)
+      } catch (error: any) {
+        if (error.code === 'NotFound') {
+          return null
+        }
+        throw error
+      }
+
+      const stream = await this.client.getObject(this.bucketName, objectName)
+      return await streamToBuffer(stream)
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to read ${pathKey}/${relativePath} from MinIO storage:`,
+        error,
+      )
+      return null
+    }
+  }
+
+  async writeFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer | string,
+    contentType?: string,
+  ): Promise<void> {
+    try {
+      const objectName = [
+        this.getPathPrefix(server, pathKey),
+        trimStorageSegment(relativePath),
+      ]
+        .filter(Boolean)
+        .join('/')
+      const body =
+        typeof content === 'string' ? Buffer.from(content, 'utf-8') : content
+
+      await this.client.putObject(
+        this.bucketName,
+        objectName,
+        body,
+        body.length,
+        contentType ? { 'Content-Type': contentType } : undefined,
+      )
+    } catch (error) {
+      throw new Error(
+        `Failed to write ${pathKey}/${relativePath} to MinIO storage: ${error}`,
+      )
+    }
+  }
+
+  async listFiles(
+    server: string,
+    pathKey: string,
+    prefix = '',
+  ): Promise<string[]> {
+    try {
+      const basePrefix = this.getPathPrefix(server, pathKey)
+      const searchPrefix = [basePrefix, trimStorageSegment(prefix)]
+        .filter(Boolean)
+        .join('/')
+      const files: string[] = []
+      const objects = this.client.listObjects(
+        this.bucketName,
+        searchPrefix,
+        true,
+      )
+
+      for await (const obj of objects) {
+        if (!obj.name || obj.name.endsWith('/')) {
+          continue
+        }
+
+        files.push(obj.name.slice(basePrefix.length + 1))
+      }
+
+      return files.sort()
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to list ${pathKey}/${prefix} from MinIO storage:`,
+        error,
+      )
+      return []
     }
   }
 
@@ -252,6 +359,14 @@ export class MinioStorage extends AbstractStorage {
       return false
     }
   }
+
+  private getPathSegment(pathKey: string): string {
+    if (pathKey === 'versions') {
+      return this.versionsPath
+    }
+
+    return trimStorageSegment(this.paths?.[pathKey] || pathKey)
+  }
 }
 
 function trimStorageSegment(value: string): string {
@@ -260,4 +375,12 @@ function trimStorageSegment(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
 }

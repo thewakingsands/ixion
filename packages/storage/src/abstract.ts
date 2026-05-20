@@ -53,6 +53,35 @@ export abstract class AbstractStorage {
   ): Promise<void>
 
   /**
+   * Read a non-version file from storage.
+   */
+  abstract readFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null>
+
+  /**
+   * Write a non-version file to storage.
+   */
+  abstract writeFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer | string,
+    contentType?: string,
+  ): Promise<void>
+
+  /**
+   * List non-version files from storage recursively.
+   */
+  abstract listFiles(
+    server: string,
+    pathKey: string,
+    prefix?: string,
+  ): Promise<string[]>
+
+  /**
    * Check if a version exists in storage
    */
   abstract hasVersion(server: string, version: string): Promise<boolean>

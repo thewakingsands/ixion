@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { sortVersions, versionRegex } from '@ffcafe/ixion-utils'
 import {
   AbstractStorage,
@@ -23,11 +23,15 @@ export interface LocalStorageConfig {
 }
 
 export class LocalStorage extends AbstractStorage {
+  private rootPath: string
+  private paths?: StoragePathMap
   private versionsRootPath: string
 
   constructor(config: StorageConfig) {
     super(config)
     const localConfig = config.config as LocalStorageConfig
+    this.rootPath = localConfig.rootPath
+    this.paths = localConfig.paths
     this.versionsRootPath = join(
       localConfig.rootPath,
       localConfig.paths?.versions || '',
@@ -69,6 +73,68 @@ export class LocalStorage extends AbstractStorage {
       throw new Error(
         `Failed to write current version to local storage: ${error}`,
       )
+    }
+  }
+
+  async readFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null> {
+    try {
+      const filePath = this.getStorageFilePath(server, pathKey, relativePath)
+      if (!existsSync(filePath)) {
+        return null
+      }
+
+      return readFileSync(filePath)
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to read ${pathKey}/${relativePath} from local storage:`,
+        error,
+      )
+      return null
+    }
+  }
+
+  async writeFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer | string,
+  ): Promise<void> {
+    try {
+      const filePath = this.getStorageFilePath(server, pathKey, relativePath)
+      mkdirSync(dirname(filePath), { recursive: true })
+      writeFileSync(filePath, content)
+    } catch (error) {
+      throw new Error(
+        `Failed to write ${pathKey}/${relativePath} to local storage: ${error}`,
+      )
+    }
+  }
+
+  async listFiles(
+    server: string,
+    pathKey: string,
+    prefix = '',
+  ): Promise<string[]> {
+    try {
+      const rootPath = this.getStorageServerPath(server, pathKey)
+      const searchPath = prefix ? join(rootPath, prefix) : rootPath
+      if (!existsSync(searchPath)) {
+        return []
+      }
+
+      return this.listDirectoryFiles(searchPath).map((filePath) =>
+        relative(rootPath, filePath).replaceAll('\\', '/'),
+      )
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to list ${pathKey}/${prefix} from local storage:`,
+        error,
+      )
+      return []
     }
   }
 
@@ -180,5 +246,41 @@ export class LocalStorage extends AbstractStorage {
         copyFileSync(sourcePath, targetPath)
       }
     }
+  }
+
+  private getStoragePathSegment(pathKey: string): string {
+    if (pathKey === 'versions') {
+      return this.paths?.versions || ''
+    }
+
+    return this.paths?.[pathKey] || pathKey
+  }
+
+  private getStorageServerPath(server: string, pathKey: string): string {
+    return join(this.rootPath, this.getStoragePathSegment(pathKey), server)
+  }
+
+  private getStorageFilePath(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): string {
+    return join(this.getStorageServerPath(server, pathKey), relativePath)
+  }
+
+  private listDirectoryFiles(rootPath: string): string[] {
+    const entries = readdirSync(rootPath, { withFileTypes: true })
+    const files: string[] = []
+
+    for (const entry of entries) {
+      const entryPath = join(rootPath, entry.name)
+      if (entry.isDirectory()) {
+        files.push(...this.listDirectoryFiles(entryPath))
+      } else {
+        files.push(entryPath)
+      }
+    }
+
+    return files
   }
 }
