@@ -17,6 +17,7 @@ import {
   type ResolvedFileIndex,
   resolveIndexMap,
 } from '../utils/sqpack-index'
+import { getStorageManager } from '../utils/storage'
 
 const require = createRequire(import.meta.filename)
 const { formatTex } = require('@ffcafe/ixion-tex')
@@ -25,15 +26,24 @@ const sqpackHeaderSize = 0x400
 const indexHeaderSize = 0x400
 const allowList = [`${uiSqPackFile}.*`]
 const assetProcessConcurrency = 16
+const uiStoragePathKey = 'ui'
+const assetFileListPath = 'asset-files.json'
 
 export interface AssetUiIconsOptions {
   server: string
   limit?: number
+  storage?: string
 }
 
 export interface AssetUiIconsStateOptions {
   server: string
   output?: string
+  storage?: string
+}
+
+export interface AssetUiIconsSyncOptions {
+  server: string
+  storage: string
 }
 
 interface IconEntry {
@@ -49,6 +59,22 @@ interface ValidatedIndex {
   resolvedIndexMap: Map<number, ResolvedDirectoryIndex>
 }
 
+interface AssetStorage {
+  readFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null>
+  writeFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer | string,
+    contentType?: string,
+  ): Promise<void>
+  listFiles(server: string, pathKey: string, prefix?: string): Promise<string[]>
+}
+
 type EncodedAssetFormat = 'webp' | 'avif'
 type AssetFormat = EncodedAssetFormat | 'tex'
 
@@ -56,6 +82,7 @@ export async function extractUiPatchIcons(
   options: AssetUiIconsOptions,
 ): Promise<void> {
   const cwd = getWorkingDir()
+  const remoteStorage = getAssetStorage(options.storage)
   const {
     outputRoot,
     patchOutputRoot,
@@ -68,11 +95,20 @@ export async function extractUiPatchIcons(
   await mkdir(patchOutputRoot, { recursive: true })
   await mkdir(assetRoot, { recursive: true })
   await mkdir(pendingDiffRoot, { recursive: true })
-  const existingAssets = await scanExistingAssets(assetRoot)
 
-  const fromVersion = await loadCurrentReference(currentRefPath)
+  const fromVersion = await loadCurrentReference(
+    currentRefPath,
+    options.server,
+    remoteStorage,
+  )
+  const existingAssets = remoteStorage
+    ? await loadRemoteExistingAssets(remoteStorage, options.server, fromVersion)
+    : await scanExistingAssets(assetRoot)
   const iconState = await loadIconState(
     join(patchOutputRoot, fromVersion, 'icons.json'),
+    options.server,
+    remoteStorage,
+    fromVersion,
   )
   const fs = new PatchFileSystem(pendingDiffRoot, allowList)
   let previousValidIndex: ValidatedIndex | null = null
@@ -115,13 +151,26 @@ export async function extractUiPatchIcons(
     const uiIndex = await validateIndexFile(fs, iconDirectoryHashes)
     if (!uiIndex) {
       await writeJson(join(patchDir, 'resolved-index.json'), { valid: false })
+      await syncRemoteJson(
+        remoteStorage,
+        options.server,
+        `patches/${patch.version}/resolved-index.json`,
+        { valid: false },
+      )
       await writeJson(currentRefPath, { ffxiv: patch.version })
+      await syncRemoteJson(remoteStorage, options.server, 'current.json', {
+        ffxiv: patch.version,
+      })
       continue
     }
 
-    await writeJson(
-      join(patchDir, 'resolved-index.json'),
-      serializeResolvedIndexMap(uiIndex.resolvedIndexMap),
+    const resolvedIndex = serializeResolvedIndexMap(uiIndex.resolvedIndexMap)
+    await writeJson(join(patchDir, 'resolved-index.json'), resolvedIndex)
+    await syncRemoteJson(
+      remoteStorage,
+      options.server,
+      `patches/${patch.version}/resolved-index.json`,
+      resolvedIndex,
     )
 
     await fs.saveState()
@@ -131,13 +180,39 @@ export async function extractUiPatchIcons(
       iconDirectoryHashes,
       assetRoot,
       existingAssets,
+      remoteStorage,
+      server: options.server,
       iconState,
       previousIconIndex: previousValidIndex?.resolvedIndexMap,
     })
 
     await writeJson(join(patchDir, 'changes.json'), changes)
-    await writeJson(join(patchDir, 'icons.json'), serializeIconState(iconState))
+    await syncRemoteJson(
+      remoteStorage,
+      options.server,
+      `patches/${patch.version}/changes.json`,
+      changes,
+    )
+    const serializedIconState = serializeIconState(iconState)
+    await writeJson(join(patchDir, 'icons.json'), serializedIconState)
+    await syncRemoteJson(
+      remoteStorage,
+      options.server,
+      `patches/${patch.version}/icons.json`,
+      serializedIconState,
+    )
+    const assetFileList = createAssetFileList(existingAssets)
+    await writeJson(join(patchDir, assetFileListPath), assetFileList)
+    await syncRemoteJson(
+      remoteStorage,
+      options.server,
+      `patches/${patch.version}/${assetFileListPath}`,
+      assetFileList,
+    )
     await writeJson(currentRefPath, { ffxiv: patch.version })
+    await syncRemoteJson(remoteStorage, options.server, 'current.json', {
+      ffxiv: patch.version,
+    })
 
     previousValidIndex = uiIndex
     await fs.clear()
@@ -149,8 +224,22 @@ export async function extractUiPatchIcons(
 export async function resolveSavedUiIconState(
   options: AssetUiIconsStateOptions,
 ): Promise<void> {
-  const { assetRoot, pendingDiffRoot } = getUiIconPaths(options.server)
-  const existingAssets = await scanExistingAssets(assetRoot)
+  const remoteStorage = getAssetStorage(options.storage)
+  const { outputRoot, assetRoot, pendingDiffRoot } = getUiIconPaths(
+    options.server,
+  )
+  const currentVersion = await loadCurrentReference(
+    join(outputRoot, 'current.json'),
+    options.server,
+    remoteStorage,
+  )
+  const existingAssets = remoteStorage
+    ? await loadRemoteExistingAssets(
+        remoteStorage,
+        options.server,
+        currentVersion,
+      )
+    : await scanExistingAssets(assetRoot)
 
   const fs = new PatchFileSystem(pendingDiffRoot, allowList)
   await fs.loadState()
@@ -162,18 +251,104 @@ export async function resolveSavedUiIconState(
     iconDirectoryHashes,
     assetRoot,
     existingAssets,
+    remoteStorage,
+    server: options.server,
     iconState,
   })
 
   console.log(result)
 }
 
+export async function syncUiAssetsToRemoteStorage(
+  options: AssetUiIconsSyncOptions,
+): Promise<void> {
+  const remoteStorage = getAssetStorage(options.storage)
+  if (!remoteStorage) {
+    throw new Error('Remote storage is required')
+  }
+
+  const { outputRoot, patchOutputRoot, assetRoot, currentRefPath } =
+    getUiIconPaths(options.server)
+
+  if (!existsSync(outputRoot)) {
+    throw new Error(`Local UI output not found: ${outputRoot}`)
+  }
+
+  const currentVersion = await loadCurrentReference(
+    currentRefPath,
+    options.server,
+    null,
+  )
+  const remoteAssets = await loadRemoteExistingAssets(
+    remoteStorage,
+    options.server,
+    currentVersion,
+  )
+  const localAssets = await scanExistingAssets(assetRoot)
+  const localAssetFileList = createAssetFileList(localAssets)
+
+  let uploadedAssets = 0
+  for (const [sha256, format] of localAssets) {
+    if (remoteAssets.get(sha256) === format) {
+      continue
+    }
+
+    const assetPath = getAssetLocalPath(assetRoot, sha256, format)
+    const content = await readFile(assetPath)
+    await remoteStorage.writeFile(
+      options.server,
+      uiStoragePathKey,
+      createAssetRelativePath(sha256, format),
+      content,
+      getAssetContentType(format),
+    )
+    remoteAssets.set(sha256, format)
+    uploadedAssets += 1
+  }
+
+  const patchFiles = await listLocalFiles(patchOutputRoot)
+  let syncedPatchFiles = 0
+  for (const relativePath of patchFiles) {
+    const fullPath = join(patchOutputRoot, relativePath)
+    const content = await readFile(fullPath)
+    await remoteStorage.writeFile(
+      options.server,
+      uiStoragePathKey,
+      `patches/${relativePath}`,
+      content,
+      getContentTypeForPath(relativePath),
+    )
+    syncedPatchFiles += 1
+  }
+
+  const currentContent = await readFile(currentRefPath)
+  await remoteStorage.writeFile(
+    options.server,
+    uiStoragePathKey,
+    'current.json',
+    currentContent,
+    'application/json',
+  )
+  await syncRemoteJson(
+    remoteStorage,
+    options.server,
+    `patches/${currentVersion}/${assetFileListPath}`,
+    localAssetFileList,
+  )
+
+  console.log(
+    `Synced ${uploadedAssets} asset file(s), ${syncedPatchFiles} patch metadata file(s), and current.json to storage '${options.storage}'.`,
+  )
+}
+
 async function processTextures(options: {
   fs: PatchFileSystem
   iconDirectoryHashes: Map<number, string>
 
+  server: string
   assetRoot: string
   existingAssets: Map<string, EncodedAssetFormat>
+  remoteStorage: AssetStorage | null
   iconState: Map<string, IconEntry>
   previousIconIndex?: Map<number, ResolvedDirectoryIndex>
 }) {
@@ -256,10 +431,12 @@ async function processTextures(options: {
       }
 
       const encodedAsset = await ensureEncodedAsset({
+        server: options.server,
         assetRoot: options.assetRoot,
         sha256,
         nextData,
         existingAssets,
+        remoteStorage: options.remoteStorage,
       })
 
       return {
@@ -307,7 +484,20 @@ async function processTextures(options: {
   return changes
 }
 
-async function loadCurrentReference(currentRefPath: string) {
+async function loadCurrentReference(
+  currentRefPath: string,
+  server: string,
+  remoteStorage: AssetStorage | null,
+) {
+  const remoteCurrent = await readRemoteJson<{ ffxiv?: string }>(
+    remoteStorage,
+    server,
+    'current.json',
+  )
+  if (remoteCurrent?.ffxiv) {
+    return remoteCurrent.ffxiv
+  }
+
   if (!existsSync(currentRefPath)) {
     return baseGameVersion
   }
@@ -318,7 +508,29 @@ async function loadCurrentReference(currentRefPath: string) {
   return content.ffxiv || baseGameVersion
 }
 
-async function loadIconState(stateIconsPath: string) {
+async function loadIconState(
+  stateIconsPath: string,
+  server: string,
+  remoteStorage: AssetStorage | null,
+  version: string,
+) {
+  const remoteContent = await readRemoteJson<Array<Omit<IconEntry, 'path'>>>(
+    remoteStorage,
+    server,
+    `patches/${version}/icons.json`,
+  )
+  if (remoteContent) {
+    return new Map(
+      remoteContent.map((entry) => [
+        toIconPath(entry.id, entry.version, entry.hr),
+        {
+          ...entry,
+          path: toIconPath(entry.id, entry.version, entry.hr),
+        },
+      ]),
+    )
+  }
+
   if (!existsSync(stateIconsPath)) {
     return new Map<string, IconEntry>()
   }
@@ -505,7 +717,7 @@ async function persistAsset(
   data: Buffer,
 ) {
   const dir = join(assetRoot, sha256.slice(0, 2))
-  const path = join(dir, `${sha256}.${format}`)
+  const path = getAssetLocalPath(assetRoot, sha256, format)
   if (existsSync(path)) {
     const existing = await stat(path)
     if (existing.size === data.length) {
@@ -537,23 +749,47 @@ async function scanExistingAssets(assetRoot: string) {
         continue
       }
 
-      const match = file.name.match(/^([0-9a-f]{64})\.(webp|avif)$/)
-      if (!match) {
+      const parsed = parseAssetRelativePath(`${entry.name}/${file.name}`)
+      if (!parsed) {
         continue
       }
 
-      existingAssets.set(match[1], match[2] as EncodedAssetFormat)
+      existingAssets.set(parsed.sha256, parsed.format)
     }
   }
 
   return existingAssets
 }
 
+async function listLocalFiles(
+  rootPath: string,
+  prefix = '',
+): Promise<string[]> {
+  const targetPath = prefix ? join(rootPath, prefix) : rootPath
+  const entries = await readdir(targetPath, { withFileTypes: true }).catch(
+    () => [],
+  )
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      files.push(...(await listLocalFiles(rootPath, relativePath)))
+    } else {
+      files.push(relativePath.replaceAll('\\', '/'))
+    }
+  }
+
+  return files.sort()
+}
+
 async function ensureEncodedAsset(options: {
+  server: string
   assetRoot: string
   sha256: string
   nextData: Buffer
   existingAssets: Map<string, EncodedAssetFormat>
+  remoteStorage: AssetStorage | null
 }): Promise<{
   format: EncodedAssetFormat
   persisted: boolean
@@ -576,9 +812,169 @@ async function ensureEncodedAsset(options: {
     format,
     encoded.data,
   )
+  if (options.remoteStorage) {
+    await options.remoteStorage.writeFile(
+      options.server,
+      uiStoragePathKey,
+      createAssetRelativePath(options.sha256, format),
+      encoded.data,
+      getAssetContentType(format),
+    )
+  }
 
   options.existingAssets.set(options.sha256, format)
   return { format, persisted }
+}
+
+function getAssetStorage(storageName?: string): AssetStorage | null {
+  if (!storageName) {
+    return null
+  }
+
+  const storageManager = getStorageManager()
+  const storage = storageManager.getStorage(storageName)
+  if (!storage) {
+    throw new Error(
+      `Storage '${storageName}' not found. Available storages: ${storageManager
+        .getStorageNames()
+        .join(', ')}`,
+    )
+  }
+
+  return storage as unknown as AssetStorage
+}
+
+function createAssetRelativePath(
+  sha256: string,
+  format: EncodedAssetFormat,
+): string {
+  return `assets/${sha256.slice(0, 2)}/${sha256}.${format}`
+}
+
+function getAssetLocalPath(
+  assetRoot: string,
+  sha256: string,
+  format: EncodedAssetFormat,
+): string {
+  return join(assetRoot, sha256.slice(0, 2), `${sha256}.${format}`)
+}
+
+function parseAssetRelativePath(relativePath: string): {
+  sha256: string
+  format: EncodedAssetFormat
+} | null {
+  const normalizedPath = relativePath.replaceAll('\\', '/')
+  const match = normalizedPath.match(
+    /^(?:assets\/)?[0-9a-f]{2}\/([0-9a-f]{64})\.(webp|avif)$/,
+  )
+  if (!match) {
+    return null
+  }
+
+  return {
+    sha256: match[1],
+    format: match[2] as EncodedAssetFormat,
+  }
+}
+
+function createAssetFileList(existingAssets: Map<string, EncodedAssetFormat>) {
+  return [...existingAssets.entries()]
+    .sort(([leftSha], [rightSha]) => leftSha.localeCompare(rightSha))
+    .map(([sha256, format]) => createAssetRelativePath(sha256, format))
+}
+
+async function loadRemoteExistingAssets(
+  remoteStorage: AssetStorage | null,
+  server: string,
+  version: string,
+) {
+  const remoteAssets = new Map<string, EncodedAssetFormat>()
+  if (!remoteStorage) {
+    return remoteAssets
+  }
+
+  const fileList = await readRemoteJson<string[]>(
+    remoteStorage,
+    server,
+    `patches/${version}/${assetFileListPath}`,
+  )
+
+  if (fileList) {
+    for (const filePath of fileList) {
+      const parsed = parseAssetRelativePath(filePath)
+      if (parsed) {
+        remoteAssets.set(parsed.sha256, parsed.format)
+      }
+    }
+
+    return remoteAssets
+  }
+
+  const remoteFiles = await remoteStorage.listFiles(
+    server,
+    uiStoragePathKey,
+    'assets',
+  )
+  for (const filePath of remoteFiles) {
+    const parsed = parseAssetRelativePath(filePath)
+    if (parsed) {
+      remoteAssets.set(parsed.sha256, parsed.format)
+    }
+  }
+
+  return remoteAssets
+}
+
+async function readRemoteJson<T>(
+  remoteStorage: AssetStorage | null,
+  server: string,
+  relativePath: string,
+): Promise<T | null> {
+  if (!remoteStorage) {
+    return null
+  }
+
+  const content = await remoteStorage.readFile(
+    server,
+    uiStoragePathKey,
+    relativePath,
+  )
+  if (!content) {
+    return null
+  }
+
+  return JSON.parse(content.toString('utf-8')) as T
+}
+
+async function syncRemoteJson(
+  remoteStorage: AssetStorage | null,
+  server: string,
+  relativePath: string,
+  value: unknown,
+) {
+  if (!remoteStorage) {
+    return
+  }
+
+  await remoteStorage.writeFile(
+    server,
+    uiStoragePathKey,
+    relativePath,
+    `${JSON.stringify(value, null, 2)}\n`,
+    'application/json',
+  )
+}
+
+function getAssetContentType(format: EncodedAssetFormat): string {
+  return format === 'avif' ? 'image/avif' : 'image/webp'
+}
+
+function getContentTypeForPath(relativePath: string): string | undefined {
+  if (relativePath.endsWith('.json')) {
+    return 'application/json'
+  }
+
+  return undefined
 }
 
 async function writeJson(path: string, value: unknown) {
