@@ -83,8 +83,17 @@ pub struct FormatTexOptions {
     pub effort: Option<u8>,
 }
 
+#[napi(object)]
+pub struct FormatTexResult {
+    pub format: String,
+    pub data: Buffer,
+}
+
 #[napi]
-pub async fn format_tex(buffer: Buffer, options: Option<FormatTexOptions>) -> napi::Result<Buffer> {
+pub async fn format_tex(
+    buffer: Buffer,
+    options: Option<FormatTexOptions>,
+) -> napi::Result<FormatTexResult> {
     let bytes = buffer.to_vec();
 
     let result = task::spawn_blocking(move || {
@@ -99,19 +108,28 @@ pub async fn format_tex(buffer: Buffer, options: Option<FormatTexOptions>) -> na
     .map_err(|error| napi::Error::from_reason(format!("texture worker failed: {error}")))?;
 
     result
-        .map(Buffer::from)
+        .map(|result| FormatTexResult {
+            format: result.format.as_str().to_owned(),
+            data: Buffer::from(result.data),
+        })
         .map_err(|error| napi::Error::from_reason(format!("{error:#}")))
 }
 
-fn format_tex_inner(data: &[u8], options: FormatTexOptions) -> Result<Vec<u8>> {
+fn format_tex_inner(data: &[u8], options: FormatTexOptions) -> Result<EncodedTexture> {
     let header = TextureHeader::parse(data)?;
     let output_format = parse_output_format(options.format.as_deref())?;
     let resolved_format = choose_output_format(output_format, header);
     let rgba = decode_tex_rgba(data, header)?;
 
     match resolved_format {
-        OutputFormat::Webp => encode_webp(&rgba, header, options),
-        OutputFormat::Avif => encode_avif(&rgba, header, options),
+        OutputFormat::Webp => Ok(EncodedTexture {
+            format: OutputFormat::Webp,
+            data: encode_webp(&rgba, header, options)?,
+        }),
+        OutputFormat::Avif => Ok(EncodedTexture {
+            format: OutputFormat::Avif,
+            data: encode_avif(&rgba, header, options)?,
+        }),
         OutputFormat::Auto => unreachable!("auto resolves to a concrete format"),
     }
 }
@@ -134,6 +152,21 @@ fn choose_output_format(requested: OutputFormat, header: TextureHeader) -> Outpu
             } else {
                 OutputFormat::Webp
             }
+        }
+    }
+}
+
+struct EncodedTexture {
+    format: OutputFormat,
+    data: Vec<u8>,
+}
+
+impl OutputFormat {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Webp => "webp",
+            Self::Avif => "avif",
+            Self::Auto => "auto",
         }
     }
 }
