@@ -365,6 +365,7 @@ async function processTextures(options: {
       from: IconEntry
       to: IconEntry
     }>,
+    unreferenced: [] as string[],
   }
 
   const afterStateReader = await SqPackReader.open({
@@ -480,6 +481,13 @@ async function processTextures(options: {
   } finally {
     await afterStateReader?.close()
   }
+
+  const referencedHashes = new Set(
+    [...iconState.values()].map((entry) => entry.sha256),
+  )
+  changes.unreferenced = [...unrefedHash]
+    .filter((sha256) => !referencedHashes.has(sha256))
+    .sort((left, right) => left.localeCompare(right))
 
   return changes
 }
