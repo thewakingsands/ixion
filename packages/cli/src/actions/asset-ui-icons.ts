@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readIndexEntries, SqPackReader } from '@ffcafe/ixion-sqpack'
+import { pMapIterable } from 'p-map'
 import { baseGameVersion, bootVersion, uiSqPackFile } from '../config'
 import { resolveLocalStoragePath } from '../utils/config'
 import { downloadPatch } from '../utils/download'
@@ -13,6 +14,7 @@ import { requestServerPatches } from '../utils/server'
 import {
   buildIconDirectoryHashes,
   type ResolvedDirectoryIndex,
+  type ResolvedFileIndex,
   resolveIndexMap,
 } from '../utils/sqpack-index'
 
@@ -22,6 +24,7 @@ const { formatTex } = require('@ffcafe/ixion-tex')
 const sqpackHeaderSize = 0x400
 const indexHeaderSize = 0x400
 const allowList = [`${uiSqPackFile}.*`]
+const assetProcessConcurrency = 16
 
 export interface AssetUiIconsOptions {
   server: string
@@ -65,6 +68,7 @@ export async function extractUiPatchIcons(
   await mkdir(patchOutputRoot, { recursive: true })
   await mkdir(assetRoot, { recursive: true })
   await mkdir(pendingDiffRoot, { recursive: true })
+  const existingAssets = await scanExistingAssets(assetRoot)
 
   const fromVersion = await loadCurrentReference(currentRefPath)
   const iconState = await loadIconState(
@@ -126,6 +130,7 @@ export async function extractUiPatchIcons(
       fs,
       iconDirectoryHashes,
       assetRoot,
+      existingAssets,
       iconState,
       previousIconIndex: previousValidIndex?.resolvedIndexMap,
     })
@@ -145,6 +150,7 @@ export async function resolveSavedUiIconState(
   options: AssetUiIconsStateOptions,
 ): Promise<void> {
   const { assetRoot, pendingDiffRoot } = getUiIconPaths(options.server)
+  const existingAssets = await scanExistingAssets(assetRoot)
 
   const fs = new PatchFileSystem(pendingDiffRoot, allowList)
   await fs.loadState()
@@ -155,6 +161,7 @@ export async function resolveSavedUiIconState(
     fs,
     iconDirectoryHashes,
     assetRoot,
+    existingAssets,
     iconState,
   })
 
@@ -166,10 +173,11 @@ async function processTextures(options: {
   iconDirectoryHashes: Map<number, string>
 
   assetRoot: string
+  existingAssets: Map<string, EncodedAssetFormat>
   iconState: Map<string, IconEntry>
   previousIconIndex?: Map<number, ResolvedDirectoryIndex>
 }) {
-  const { fs, iconDirectoryHashes, iconState } = options
+  const { fs, iconDirectoryHashes, iconState, existingAssets } = options
   const uiIndex = await validateIndexFile(fs, iconDirectoryHashes)
   if (!uiIndex) {
     throw new Error('Invalid index')
@@ -219,11 +227,7 @@ async function processTextures(options: {
       }
     }
 
-    const iter = iterateFiles(
-      options.previousIconIndex ?? null,
-      uiIndex.resolvedIndexMap,
-    )
-    for (const { path, afterFile } of iter) {
+    const mapper = async ({ path, afterFile }: FileChange) => {
       const previous = iconState.get(path) ?? null
       if (!afterFile) {
         // remove
@@ -233,7 +237,7 @@ async function processTextures(options: {
           iconState.delete(path)
         }
 
-        continue
+        return null
       }
 
       const nextData = await afterStateReader.readFile(path).catch((e) => {
@@ -242,23 +246,44 @@ async function processTextures(options: {
       })
       if (!nextData) {
         // Patch may not has this file, skip
-        continue
+        return null
       }
 
       const sha256 = createHash('sha256').update(nextData).digest('hex')
       if (previous && sha256 === previous.sha256 && previous.format !== 'tex') {
         // Same as previous
+        return null
+      }
+
+      const encodedAsset = await ensureEncodedAsset({
+        assetRoot: options.assetRoot,
+        sha256,
+        nextData,
+        existingAssets,
+      })
+
+      return {
+        previous,
+        nextEntry: createIconStateEntry(path, sha256, encodedAsset.format),
+        persisted: encodedAsset.persisted,
+      }
+    }
+
+    const processedEntries = pMapIterable(
+      iterateFiles(options.previousIconIndex ?? null, uiIndex.resolvedIndexMap),
+      mapper,
+      { concurrency: assetProcessConcurrency },
+    )
+
+    for await (const processed of processedEntries) {
+      if (!processed) {
         continue
       }
 
-      const encoded = await formatTex(nextData, {
-        format: 'auto',
-      })
-      const format = encoded.format as EncodedAssetFormat
-      await persistAsset(options.assetRoot, sha256, format, encoded.data)
-      increaseWriteCount()
-
-      const nextEntry = createIconStateEntry(path, sha256, format)
+      const { previous, nextEntry, persisted } = processed
+      if (persisted) {
+        increaseWriteCount()
+      }
 
       if (previous) {
         // update
@@ -273,7 +298,7 @@ async function processTextures(options: {
         changes.added.push(nextEntry)
       }
 
-      iconState.set(path, nextEntry)
+      iconState.set(nextEntry.path, nextEntry)
     }
   } finally {
     await afterStateReader?.close()
@@ -353,10 +378,16 @@ async function validateIndexFile(
   }
 }
 
+interface FileChange {
+  path: string
+  beforeFile: ResolvedFileIndex | null
+  afterFile: ResolvedFileIndex | null
+}
+
 function* iterateFiles(
   beforeIndex: Map<number, ResolvedDirectoryIndex> | null,
   afterIndex: Map<number, ResolvedDirectoryIndex>,
-) {
+): Generator<FileChange> {
   const allDirHashes = new Set([
     ...(beforeIndex?.keys() ?? []),
     ...afterIndex.keys(),
@@ -478,12 +509,76 @@ async function persistAsset(
   if (existsSync(path)) {
     const existing = await stat(path)
     if (existing.size === data.length) {
-      return
+      return false
     }
   }
 
   await mkdir(dir, { recursive: true })
   await writeFile(path, data)
+  return true
+}
+
+async function scanExistingAssets(assetRoot: string) {
+  const existingAssets = new Map<string, EncodedAssetFormat>()
+  const directories = await readdir(assetRoot, { withFileTypes: true }).catch(
+    () => [],
+  )
+
+  for (const entry of directories) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+
+    const files = await readdir(join(assetRoot, entry.name), {
+      withFileTypes: true,
+    }).catch(() => [])
+    for (const file of files) {
+      if (!file.isFile()) {
+        continue
+      }
+
+      const match = file.name.match(/^([0-9a-f]{64})\.(webp|avif)$/)
+      if (!match) {
+        continue
+      }
+
+      existingAssets.set(match[1], match[2] as EncodedAssetFormat)
+    }
+  }
+
+  return existingAssets
+}
+
+async function ensureEncodedAsset(options: {
+  assetRoot: string
+  sha256: string
+  nextData: Buffer
+  existingAssets: Map<string, EncodedAssetFormat>
+}): Promise<{
+  format: EncodedAssetFormat
+  persisted: boolean
+}> {
+  const existingFormat = options.existingAssets.get(options.sha256)
+  if (existingFormat) {
+    return {
+      format: existingFormat,
+      persisted: false,
+    }
+  }
+
+  const encoded = await formatTex(options.nextData, {
+    format: 'auto',
+  })
+  const format = encoded.format as EncodedAssetFormat
+  const persisted = await persistAsset(
+    options.assetRoot,
+    options.sha256,
+    format,
+    encoded.data,
+  )
+
+  options.existingAssets.set(options.sha256, format)
+  return { format, persisted }
 }
 
 async function writeJson(path: string, value: unknown) {

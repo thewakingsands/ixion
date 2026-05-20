@@ -39,6 +39,7 @@
     "@octokit/rest": "^22.0.1",
     "commander": "^14.0.3",
     "debug": "catalog:",
-    "execa": "^9.6.1"
+    "execa": "^9.6.1",
+    "p-map": "^7.0.4"
   }
 }

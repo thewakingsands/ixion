@@ -103,6 +103,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      p-map:
+        specifier: ^7.0.4
+        version: 7.0.4
     devDependencies:
       '@types/debug':
         specifier: 'catalog:'
@@ -1727,6 +1730,10 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
+  p-map@7.0.4:
+    resolution: {integrity: sha512-tkAQEw8ysMzmkhgw8k+1U/iPhWNhykKnSk4Rd5zLoPJCuJaGRPo6YposrZgaxHKzDHdDWWZvE/Sk7hsL2X/CpQ==}
+    engines: {node: '>=18'}
+
   parse-ms@4.0.0:
     resolution: {integrity: sha512-TXfryirbmq34y8QBwgqCVLi+8oA3oWx2eAnSn62ITyEhEYaWRlVZ2DvMM9eZbMs/RfxPu/PK/aBLyGj4IrqMHw==}
     engines: {node: '>=18'}
@@ -3257,6 +3264,8 @@ snapshots:
   object-assign@4.1.1: {}
 
   obug@2.1.1: {}
+
+  p-map@7.0.4: {}
 
   parse-ms@4.0.0: {}
 
