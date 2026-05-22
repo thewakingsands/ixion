@@ -71,11 +71,18 @@ export async function extractUiPatchIcons(
   for (const [index, patch] of ffxivPatches.entries()) {
     console.log(`[${index + 1}/${ffxivPatches.length}] ${patch.version}`)
 
+    console.log(`  Downloading patch ${patch.version}...`)
     const patchPath = await downloadPatch(patch, cwd)
+
+    console.log(`  Applying patch ${patch.version}...`)
     await storage.fs.applyPatch(patchPath)
 
+    console.log(`  Validating UI index...`)
     const uiIndex = await validateIndexFile(storage.fs, iconDirectoryHashes)
     if (!uiIndex) {
+      console.log(
+        `  UI index is invalid; recording state and skipping extraction.`,
+      )
       await storage.writePatchJson(patch.version, 'resolved-index.json', {
         valid: false,
       })
@@ -83,14 +90,21 @@ export async function extractUiPatchIcons(
       continue
     }
 
+    console.log(
+      `  UI index valid with ${countResolvedIndexFiles(uiIndex)} icon file(s).`,
+    )
+
+    console.log(`  Writing resolved index snapshot...`)
     await storage.writePatchJson(
       patch.version,
       'resolved-index.json',
       serializeResolvedIndexMap(uiIndex),
     )
 
+    console.log(`  Saving patch filesystem state...`)
     await storage.fs.saveState()
 
+    console.log(`  Extracting and encoding changed textures...`)
     const changes = await processTextures({
       uiIndex,
       storage,
@@ -98,8 +112,11 @@ export async function extractUiPatchIcons(
       previousUiIndex,
     })
 
+    console.log(`  ${formatTextureChangeSummary(changes)}`)
+
     const serializedIconState = serializeIconState(iconState)
     const assetFileList = storage.getAssetFileList()
+    console.log(`  Writing patch metadata...`)
     await storage.writePatchJson(patch.version, 'changes.json', changes)
     await storage.writePatchJson(
       patch.version,
@@ -114,11 +131,14 @@ export async function extractUiPatchIcons(
     await storage.writeCurrentReference(patch.version)
 
     if (storage.hasRemoteStorage() && hasIconChanges(changes)) {
+      console.log(`  Syncing changed assets to remote storage...`)
       await storage.syncToRemote(patch.version)
     }
 
     previousUiIndex = uiIndex
+    console.log(`  Clearing in-memory patch state...`)
     await storage.fs.clear()
+    console.log(`  Finished ${patch.version}.`)
   }
 
   console.log(`Done. Assets: ${storage.assetRoot}`)
@@ -181,4 +201,18 @@ function hasIconChanges(changes: TextureChanges) {
     changes.removed.length > 0 ||
     changes.edited.length > 0
   )
+}
+
+function countResolvedIndexFiles(resolvedIndexMap: ResolvedIndexMap): number {
+  let count = 0
+
+  for (const entry of resolvedIndexMap.values()) {
+    count += entry.files.size
+  }
+
+  return count
+}
+
+function formatTextureChangeSummary(changes: TextureChanges): string {
+  return `Processed textures: ${changes.added.length} added, ${changes.edited.length} updated, ${changes.removed.length} removed, ${changes.unreferenced.length} unreferenced asset(s).`
 }
