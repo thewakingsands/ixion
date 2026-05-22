@@ -61,6 +61,16 @@ export class StorageManager {
     return Array.from(this.storages.keys())
   }
 
+  findLocalStorage(): LocalStorage | null {
+    for (const storage of this.storages.values()) {
+      if (storage.getType() === 'local') {
+        return storage as LocalStorage
+      }
+    }
+
+    return null
+  }
+
   /**
    * Create a new StorageManager with only the specified storages
    */

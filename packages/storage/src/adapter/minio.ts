@@ -100,6 +100,12 @@ export class MinioStorage extends AbstractStorage {
     }
   }
 
+  getRootPath(pathKey: string, server?: string): string {
+    return [this.prefix, this.getPathSegment(pathKey), server]
+      .filter(Boolean)
+      .join('/')
+  }
+
   async writeCurrentVersion(
     server: string,
     versionData: VersionData,

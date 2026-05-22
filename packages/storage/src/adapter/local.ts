@@ -58,6 +58,11 @@ export class LocalStorage extends AbstractStorage {
     }
   }
 
+  getRootPath(pathKey: string, server?: string): string {
+    const rootPath = join(this.rootPath, this.getStoragePathSegment(pathKey))
+    return server ? join(rootPath, server) : rootPath
+  }
+
   async writeCurrentVersion(
     server: string,
     versionData: VersionData,

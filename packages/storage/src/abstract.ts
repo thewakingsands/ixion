@@ -45,6 +45,11 @@ export abstract class AbstractStorage {
   abstract readCurrentVersion(server: string): Promise<VersionData | null>
 
   /**
+   * Get the root path or prefix for a storage path type.
+   */
+  abstract getRootPath(pathKey: string, server?: string): string
+
+  /**
    * Write the current version data to storage
    */
   abstract writeCurrentVersion(
