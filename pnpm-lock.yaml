@@ -94,6 +94,9 @@ importers:
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      cli-progress:
+        specifier: ^3.12.0
+        version: 3.12.0
       commander:
         specifier: ^14.0.3
         version: 14.0.3
@@ -107,6 +110,9 @@ importers:
         specifier: ^7.0.4
         version: 7.0.4
     devDependencies:
+      '@types/cli-progress':
+        specifier: ^3.11.6
+        version: 3.11.6
       '@types/debug':
         specifier: 'catalog:'
         version: 4.1.12

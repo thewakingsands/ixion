@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readIndexEntries, SqPackReader } from '@ffcafe/ixion-sqpack'
+import { SingleBar } from 'cli-progress'
 import { pMapIterable } from 'p-map'
 import { baseGameVersion, bootVersion, uiSqPackFile } from '../config'
 import { resolveLocalStoragePath } from '../utils/config'
@@ -286,13 +287,20 @@ export async function syncUiAssetsToRemoteStorage(
   )
   const localAssets = await scanExistingAssets(assetRoot)
   const localAssetFileList = createAssetFileList(localAssets)
+  const assetUploads = [...localAssets].filter(
+    ([sha256, format]) => remoteAssets.get(sha256) !== format,
+  )
+  const patchFiles = await listLocalFiles(patchOutputRoot)
+  const progressBar = new SingleBar({
+    format: '{phase} [{bar}] {value}/{total}',
+    hideCursor: true,
+  })
 
   let uploadedAssets = 0
-  for (const [sha256, format] of localAssets) {
-    if (remoteAssets.get(sha256) === format) {
-      continue
-    }
-
+  if (assetUploads.length > 0) {
+    progressBar.start(assetUploads.length, 0, { phase: 'Assets  ' })
+  }
+  for (const [sha256, format] of assetUploads) {
     const assetPath = getAssetLocalPath(assetRoot, sha256, format)
     const content = await readFile(assetPath)
     await remoteStorage.writeFile(
@@ -304,10 +312,16 @@ export async function syncUiAssetsToRemoteStorage(
     )
     remoteAssets.set(sha256, format)
     uploadedAssets += 1
+    progressBar.increment()
+  }
+  if (assetUploads.length > 0) {
+    progressBar.stop()
   }
 
-  const patchFiles = await listLocalFiles(patchOutputRoot)
   let syncedPatchFiles = 0
+  if (patchFiles.length > 0) {
+    progressBar.start(patchFiles.length, 0, { phase: 'Patches ' })
+  }
   for (const relativePath of patchFiles) {
     const fullPath = join(patchOutputRoot, relativePath)
     const content = await readFile(fullPath)
@@ -319,8 +333,13 @@ export async function syncUiAssetsToRemoteStorage(
       getContentTypeForPath(relativePath),
     )
     syncedPatchFiles += 1
+    progressBar.increment()
+  }
+  if (patchFiles.length > 0) {
+    progressBar.stop()
   }
 
+  progressBar.start(2, 0, { phase: 'Manifest ' })
   const currentContent = await readFile(currentRefPath)
   await remoteStorage.writeFile(
     options.server,
@@ -329,12 +348,15 @@ export async function syncUiAssetsToRemoteStorage(
     currentContent,
     'application/json',
   )
+  progressBar.increment()
   await syncRemoteJson(
     remoteStorage,
     options.server,
     `patches/${currentVersion}/${assetFileListPath}`,
     localAssetFileList,
   )
+  progressBar.increment()
+  progressBar.stop()
 
   console.log(
     `Synced ${uploadedAssets} asset file(s), ${syncedPatchFiles} patch metadata file(s), and current.json to storage '${options.storage}'.`,
