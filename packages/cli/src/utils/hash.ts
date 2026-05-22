@@ -4,14 +4,22 @@ import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PatchEntry } from '@ffcafe/ixion-server'
 
+export function calculateHash(
+  buffer: Buffer,
+  type: 'sha1' | 'sha256' = 'sha1',
+) {
+  const hash = createHash(type)
+  hash.update(buffer)
+  return hash.digest('hex')
+}
+
 export function calculateHashForFile(
   path: string,
   type: 'sha1' | 'sha256' = 'sha1',
 ): string | undefined {
   try {
-    const hash = createHash(type)
-    hash.update(readFileSync(path))
-    return hash.digest('hex')
+    const buffer = readFileSync(path)
+    return calculateHash(buffer, type)
   } catch (e) {
     if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
       return undefined

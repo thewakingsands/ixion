@@ -78,4 +78,27 @@ export class PatchFileSystem extends VirtualFileSystem {
     // cannot fulfill the request
     return null
   }
+
+  open = async (path: string) => {
+    const self = this
+    return {
+      async read(buffer: Buffer, offset = 0, length?: number, position = 0) {
+        const read = await self.readFile(
+          path,
+          position,
+          length ? position + length : undefined,
+        )
+        if (!read) {
+          return 0
+        }
+
+        read.copy(buffer, offset)
+        return read.length
+      },
+      async readFile() {
+        return self.readFile(path) as Promise<Buffer>
+      },
+      async close() {},
+    }
+  }
 }

@@ -40,6 +40,7 @@ export function buildIconDirectoryHashes() {
   return map
 }
 
+export type ResolvedIndexMap = Map<number, ResolvedDirectoryIndex>
 export function resolveIndexMap({
   indexEntries,
   dirHashMap,
@@ -51,8 +52,8 @@ export function resolveIndexMap({
 
   dirHashMap: Map<number, string>
   fileNameGenerator?: (dirPath: string) => string[]
-}) {
-  const resolved = new Map<number, ResolvedDirectoryIndex>()
+}): ResolvedIndexMap {
+  const resolved: ResolvedIndexMap = new Map()
   for (const dirHash of dirIndexEntries.keys()) {
     const path = dirHashMap.get(dirHash)
     resolved.set(dirHash, {
