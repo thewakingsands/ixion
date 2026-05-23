@@ -208,6 +208,7 @@ export class AssetStorage {
     }
 
     const currentVersion = await this.loadLocalCurrentReference()
+    const manifestVersion = version ?? currentVersion.lastValidIndex
     const remoteAssets = await this.loadRemoteExistingAssets(
       currentVersion.lastValidIndex,
     )
@@ -224,17 +225,30 @@ export class AssetStorage {
       hideCursor: true,
     })
 
+    console.log(
+      `Syncing UI assets for ${this.server} to storage '${this.getRemoteStorageName()}'${version ? ` for patch ${version}` : ''}.`,
+    )
+    console.log(
+      `Local assets: ${localAssets.size}, remote assets: ${remoteAssets.size}, pending uploads: ${assetUploads.length}.`,
+    )
+    console.log(
+      `Patch metadata files queued: ${patchFiles.length}. Manifest version: ${manifestVersion}.`,
+    )
+
     let uploadedAssets = 0
     if (assetUploads.length > 0) {
+      console.log(`Uploading ${assetUploads.length} asset file(s)...`)
       progressBar.start(assetUploads.length, 0, { phase: 'Assets  ' })
+    } else {
+      console.log(`No asset files need uploading.`)
     }
     for (const [sha256, format] of assetUploads) {
       const assetPath = getAssetPath(sha256, format)
-      const content = await readFile(assetPath)
+      const content = await readFile(join(this.outputRoot, assetPath))
       await this.remoteStorage.writeFile(
         this.server,
         uiStoragePathKey,
-        getAssetPath(sha256, format),
+        assetPath,
         content,
         getAssetContentType(format),
       )
@@ -248,7 +262,10 @@ export class AssetStorage {
 
     let syncedPatchFiles = 0
     if (patchFiles.length > 0) {
+      console.log(`Uploading ${patchFiles.length} patch metadata file(s)...`)
       progressBar.start(patchFiles.length, 0, { phase: 'Patches ' })
+    } else {
+      console.log(`No patch metadata files need uploading.`)
     }
     for (const relativePath of patchFiles) {
       const content = await readFile(join(this.patchRoot, relativePath))
@@ -266,6 +283,7 @@ export class AssetStorage {
       progressBar.stop()
     }
 
+    console.log(`Uploading manifest files...`)
     progressBar.start(2, 0, { phase: 'Manifest ' })
     const currentContent = await readFile(this.currentRefPath)
     await this.remoteStorage.writeFile(
@@ -277,7 +295,7 @@ export class AssetStorage {
     )
     progressBar.increment()
     await this.writeRemoteJson(
-      `${pathSegment.patches}/${version ?? currentVersion.lastValidIndex}/${assetFileListPath}`,
+      `${pathSegment.patches}/${manifestVersion}/${assetFileListPath}`,
       localAssetFileList,
     )
     progressBar.increment()
@@ -415,6 +433,7 @@ export class AssetStorage {
       return remoteAssets
     }
 
+    console.log('Fallback to listing remote files')
     const remoteFiles = await this.remoteStorage.listFiles(
       this.server,
       uiStoragePathKey,
