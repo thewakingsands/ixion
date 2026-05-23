@@ -13,6 +13,7 @@ const { formatTex } = await import('@ffcafe/ixion-tex')
 const allowList = [`${uiSqPackFile}.*`]
 const uiStoragePathKey = 'ui'
 const assetFileListPath = 'asset-files.json'
+const syncConcurrency = 128
 const pathSegment = {
   patches: 'patches',
   assets: 'assets',
@@ -199,7 +200,8 @@ export class AssetStorage {
   }
 
   async syncToRemote(version?: string): Promise<void> {
-    if (!this.remoteStorage) {
+    const { remoteStorage } = this
+    if (!remoteStorage) {
       throw new Error('Remote storage is required')
     }
 
@@ -234,6 +236,7 @@ export class AssetStorage {
     console.log(
       `Patch metadata files queued: ${patchFiles.length}. Manifest version: ${manifestVersion}.`,
     )
+    console.log(`Upload concurrency: ${syncConcurrency}.`)
 
     let uploadedAssets = 0
     if (assetUploads.length > 0) {
@@ -242,20 +245,24 @@ export class AssetStorage {
     } else {
       console.log(`No asset files need uploading.`)
     }
-    for (const [sha256, format] of assetUploads) {
-      const assetPath = getAssetPath(sha256, format)
-      const content = await readFile(join(this.outputRoot, assetPath))
-      await this.remoteStorage.writeFile(
-        this.server,
-        uiStoragePathKey,
-        assetPath,
-        content,
-        getAssetContentType(format),
-      )
-      remoteAssets.set(sha256, format)
-      uploadedAssets += 1
-      progressBar.increment()
-    }
+    await processWithConcurrency(
+      assetUploads,
+      syncConcurrency,
+      async ([sha256, format]) => {
+        const assetPath = getAssetPath(sha256, format)
+        const content = await readFile(join(this.outputRoot, assetPath))
+        await remoteStorage.writeFile(
+          this.server,
+          uiStoragePathKey,
+          assetPath,
+          content,
+          getAssetContentType(format),
+        )
+        remoteAssets.set(sha256, format)
+        uploadedAssets += 1
+        progressBar.increment()
+      },
+    )
     if (assetUploads.length > 0) {
       progressBar.stop()
     }
@@ -267,18 +274,22 @@ export class AssetStorage {
     } else {
       console.log(`No patch metadata files need uploading.`)
     }
-    for (const relativePath of patchFiles) {
-      const content = await readFile(join(this.patchRoot, relativePath))
-      await this.remoteStorage.writeFile(
-        this.server,
-        uiStoragePathKey,
-        `${pathSegment.patches}/${relativePath}`,
-        content,
-        getContentTypeForPath(relativePath),
-      )
-      syncedPatchFiles += 1
-      progressBar.increment()
-    }
+    await processWithConcurrency(
+      patchFiles,
+      syncConcurrency,
+      async (relativePath) => {
+        const content = await readFile(join(this.patchRoot, relativePath))
+        await remoteStorage.writeFile(
+          this.server,
+          uiStoragePathKey,
+          `${pathSegment.patches}/${relativePath}`,
+          content,
+          getContentTypeForPath(relativePath),
+        )
+        syncedPatchFiles += 1
+        progressBar.increment()
+      },
+    )
     if (patchFiles.length > 0) {
       progressBar.stop()
     }
@@ -286,7 +297,7 @@ export class AssetStorage {
     console.log(`Uploading manifest files...`)
     progressBar.start(2, 0, { phase: 'Manifest ' })
     const currentContent = await readFile(this.currentRefPath)
-    await this.remoteStorage.writeFile(
+    await remoteStorage.writeFile(
       this.server,
       uiStoragePathKey,
       pathSegment.currentRef,
@@ -527,4 +538,27 @@ function createIconStateMap(entries: Array<Omit<IconEntry, 'path'>>) {
 function toIconPath(id: number, version: string, hr: boolean) {
   const paddedId = id.toString().padStart(6, '0')
   return `ui/icon/${paddedId.slice(0, 3)}000${version}/${paddedId}${hr ? '_hr1' : ''}.tex`
+}
+
+async function processWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) {
+    return
+  }
+
+  let nextIndex = 0
+  const workerCount = Math.min(concurrency, items.length)
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex]
+        nextIndex += 1
+        await worker(item)
+      }
+    }),
+  )
 }
