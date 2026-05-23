@@ -90,18 +90,26 @@ export class AssetStorage {
     return this.remoteStorageName
   }
 
-  async loadCurrentReference(): Promise<string> {
+  async loadCurrentReference(): Promise<Required<CurrentReference>> {
     const current = await this.readJson<CurrentReference>(
       pathSegment.currentRef,
     )
-    return current?.ffxiv || baseGameVersion
+    const ffxiv = current?.ffxiv || baseGameVersion
+    return {
+      ffxiv,
+      lastValidIndex: current?.lastValidIndex || ffxiv,
+    }
   }
 
-  async loadLocalCurrentReference(): Promise<string> {
+  async loadLocalCurrentReference(): Promise<Required<CurrentReference>> {
     const current = await this.readLocalJson<CurrentReference>(
       pathSegment.currentRef,
     )
-    return current?.ffxiv || baseGameVersion
+    const ffxiv = current?.ffxiv || baseGameVersion
+    return {
+      ffxiv,
+      lastValidIndex: current?.lastValidIndex || ffxiv,
+    }
   }
 
   async loadExistingAssets(
@@ -143,9 +151,11 @@ export class AssetStorage {
     await this.writeJson(`${pathSegment.patches}/${version}/${fileName}`, value)
   }
 
-  async writeCurrentReference(version: string): Promise<void> {
+  async writeCurrentReference(current: CurrentReference): Promise<void> {
+    const ffxiv = current.ffxiv || baseGameVersion
     await this.writeJson<CurrentReference>(pathSegment.currentRef, {
-      ffxiv: version,
+      ffxiv,
+      lastValidIndex: current.lastValidIndex || ffxiv,
     })
   }
 
@@ -198,7 +208,9 @@ export class AssetStorage {
     }
 
     const currentVersion = await this.loadLocalCurrentReference()
-    const remoteAssets = await this.loadRemoteExistingAssets(currentVersion)
+    const remoteAssets = await this.loadRemoteExistingAssets(
+      currentVersion.lastValidIndex,
+    )
     const localAssets = await this.scanLocalExistingAssets()
     const localAssetFileList = createAssetFileList(localAssets)
     const assetUploads = [...localAssets].filter(
@@ -265,7 +277,7 @@ export class AssetStorage {
     )
     progressBar.increment()
     await this.writeRemoteJson(
-      `${pathSegment.patches}/${version ?? currentVersion}/${assetFileListPath}`,
+      `${pathSegment.patches}/${version ?? currentVersion.lastValidIndex}/${assetFileListPath}`,
       localAssetFileList,
     )
     progressBar.increment()

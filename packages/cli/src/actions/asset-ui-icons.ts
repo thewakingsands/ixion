@@ -1,4 +1,4 @@
-import { bootVersion } from '../config'
+import { baseGameVersion, bootVersion } from '../config'
 import { downloadPatch } from '../utils/download'
 import { getWorkingDir } from '../utils/root'
 import { requestServerPatches } from '../utils/server'
@@ -37,10 +37,18 @@ export async function extractUiPatchIcons(
 ): Promise<void> {
   const cwd = getWorkingDir()
   const storage = new AssetStorage(options)
-  const fromVersion = await storage.loadCurrentReference()
+  const currentReference = await storage.loadCurrentReference()
+  const fromVersion = currentReference.lastValidIndex
   await storage.loadExistingAssets(fromVersion)
   const iconState = await storage.loadIconState(fromVersion)
   let previousUiIndex: ResolvedIndexMap | undefined
+
+  if (fromVersion !== baseGameVersion) {
+    await storage.fs.loadState()
+    previousUiIndex =
+      (await validateIndexFile(storage.fs, buildIconDirectoryHashes())) ??
+      undefined
+  }
 
   const gameVersions = {
     boot: bootVersion,
@@ -68,6 +76,12 @@ export async function extractUiPatchIcons(
     `Processing ${ffxivPatches.length} ${options.server} main-game patch(es) from ${fromVersion}.`,
   )
 
+  if (currentReference.ffxiv !== currentReference.lastValidIndex) {
+    console.log(
+      `Replaying from last valid index state ${currentReference.lastValidIndex} while current reference is ${currentReference.ffxiv}.`,
+    )
+  }
+
   for (const [index, patch] of ffxivPatches.entries()) {
     console.log(`[${index + 1}/${ffxivPatches.length}] ${patch.version}`)
 
@@ -81,12 +95,13 @@ export async function extractUiPatchIcons(
     const uiIndex = await validateIndexFile(storage.fs, iconDirectoryHashes)
     if (!uiIndex) {
       console.log(
-        `  UI index is invalid; recording state and skipping extraction.`,
+        `  UI index is invalid; skipping patch metadata and keeping last valid index at ${currentReference.lastValidIndex}.`,
       )
-      await storage.writePatchJson(patch.version, 'resolved-index.json', {
-        valid: false,
+      currentReference.ffxiv = patch.version
+      await storage.writeCurrentReference({
+        ffxiv: patch.version,
+        lastValidIndex: currentReference.lastValidIndex,
       })
-      await storage.writeCurrentReference(patch.version)
       continue
     }
 
@@ -128,7 +143,10 @@ export async function extractUiPatchIcons(
       assetFileListPath,
       assetFileList,
     )
-    await storage.writeCurrentReference(patch.version)
+    await storage.writeCurrentReference({
+      ffxiv: patch.version,
+      lastValidIndex: patch.version,
+    })
 
     if (storage.hasRemoteStorage() && hasIconChanges(changes)) {
       console.log(`  Syncing changed assets to remote storage...`)
@@ -136,6 +154,8 @@ export async function extractUiPatchIcons(
     }
 
     previousUiIndex = uiIndex
+    currentReference.ffxiv = patch.version
+    currentReference.lastValidIndex = patch.version
     console.log(`  Clearing in-memory patch state...`)
     await storage.fs.clear()
     console.log(`  Finished ${patch.version}.`)
@@ -149,7 +169,7 @@ export async function resolveSavedUiIconState(
 ): Promise<void> {
   const storage = new AssetStorage(options)
   const currentVersion = await storage.loadCurrentReference()
-  await storage.loadExistingAssets(currentVersion)
+  await storage.loadExistingAssets(currentVersion.lastValidIndex)
   await storage.fs.loadState()
 
   const iconDirectoryHashes = buildIconDirectoryHashes()

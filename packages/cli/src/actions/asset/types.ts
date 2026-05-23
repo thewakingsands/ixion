@@ -12,4 +12,5 @@ export interface IconEntry {
 
 export interface CurrentReference {
   ffxiv?: string
+  lastValidIndex?: string
 }
