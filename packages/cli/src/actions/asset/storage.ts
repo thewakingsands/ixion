@@ -13,7 +13,8 @@ const { formatTex } = await import('@ffcafe/ixion-tex')
 const allowList = [`${uiSqPackFile}.*`]
 const uiStoragePathKey = 'ui'
 const assetFileListPath = 'asset-files.json'
-const syncConcurrency = 128
+const syncAssetsConcurrency = 128
+const syncPatchConcurrency = 4
 const pathSegment = {
   patches: 'patches',
   assets: 'assets',
@@ -199,7 +200,14 @@ export class AssetStorage {
     return { format, persisted: true }
   }
 
-  async syncToRemote(version?: string): Promise<void> {
+  async syncToRemote(
+    version?: string,
+    options: {
+      syncAssets: boolean
+    } = {
+      syncAssets: false,
+    },
+  ): Promise<void> {
     const { remoteStorage } = this
     if (!remoteStorage) {
       throw new Error('Remote storage is required')
@@ -211,72 +219,94 @@ export class AssetStorage {
 
     const currentVersion = await this.loadLocalCurrentReference()
     const manifestVersion = version ?? currentVersion.lastValidIndex
-    const remoteAssets = await this.loadRemoteExistingAssets(
-      currentVersion.lastValidIndex,
-    )
-    const localAssets = await this.scanLocalExistingAssets()
-    const localAssetFileList = createAssetFileList(localAssets)
-    const assetUploads = [...localAssets].filter(
-      ([sha256, format]) => remoteAssets.get(sha256) !== format,
-    )
-    const patchFiles = version
-      ? await this.listLocalFiles(this.patchRoot, version)
-      : await this.listLocalFiles(this.patchRoot)
+
     const progressBar = new SingleBar({
       format: '{phase} [{bar}] {value}/{total}',
       hideCursor: true,
     })
 
-    console.log(
-      `Syncing UI assets for ${this.server} to storage '${this.getRemoteStorageName()}'${version ? ` for patch ${version}` : ''}.`,
-    )
-    console.log(
-      `Local assets: ${localAssets.size}, remote assets: ${remoteAssets.size}, pending uploads: ${assetUploads.length}.`,
-    )
+    if (options.syncAssets) {
+      const remoteAssets = await this.loadRemoteExistingAssets(
+        currentVersion.lastValidIndex,
+      )
+      const localAssets = await this.scanLocalExistingAssets()
+      const localAssetFileList = createAssetFileList(localAssets)
+
+      const assetUploads = [...localAssets].filter(
+        ([sha256, format]) => remoteAssets.get(sha256) !== format,
+      )
+
+      console.log(
+        `Syncing UI assets for ${this.server} to storage '${this.getRemoteStorageName()}'${version ? ` for patch ${version}` : ''}.`,
+      )
+      console.log(
+        `Local assets: ${localAssets.size}, remote assets: ${remoteAssets.size}, pending uploads: ${assetUploads.length}.`,
+      )
+      console.log(`Upload concurrency: ${syncAssetsConcurrency}.`)
+
+      let uploadedAssets = 0
+      if (assetUploads.length > 0) {
+        console.log(`Uploading ${assetUploads.length} asset file(s)...`)
+        progressBar.start(assetUploads.length, 0, { phase: 'Assets  ' })
+
+        await processWithConcurrency(
+          assetUploads,
+          syncAssetsConcurrency,
+          async ([sha256, format]) => {
+            const assetPath = getAssetPath(sha256, format)
+            const content = await readFile(join(this.outputRoot, assetPath))
+            await remoteStorage.writeFile(
+              this.server,
+              uiStoragePathKey,
+              assetPath,
+              content,
+              getAssetContentType(format),
+            )
+            remoteAssets.set(sha256, format)
+            uploadedAssets += 1
+            progressBar.increment()
+          },
+        )
+
+        progressBar.stop()
+      } else {
+        console.log(`No asset files need uploading.`)
+      }
+
+      await this.writeRemoteJson(
+        `${pathSegment.patches}/${manifestVersion}/${assetFileListPath}`,
+        localAssetFileList,
+      )
+
+      console.log(
+        `Synced ${uploadedAssets} asset file(s) and written assets list.`,
+      )
+    }
+
+    const patchFiles = version
+      ? await this.listLocalFiles(this.patchRoot, version)
+      : await this.listLocalFiles(this.patchRoot)
+    const changedPatchFiles = await this.collectChangedPatchFiles(patchFiles)
+
     console.log(
       `Patch metadata files queued: ${patchFiles.length}. Manifest version: ${manifestVersion}.`,
     )
-    console.log(`Upload concurrency: ${syncConcurrency}.`)
-
-    let uploadedAssets = 0
-    if (assetUploads.length > 0) {
-      console.log(`Uploading ${assetUploads.length} asset file(s)...`)
-      progressBar.start(assetUploads.length, 0, { phase: 'Assets  ' })
-    } else {
-      console.log(`No asset files need uploading.`)
-    }
-    await processWithConcurrency(
-      assetUploads,
-      syncConcurrency,
-      async ([sha256, format]) => {
-        const assetPath = getAssetPath(sha256, format)
-        const content = await readFile(join(this.outputRoot, assetPath))
-        await remoteStorage.writeFile(
-          this.server,
-          uiStoragePathKey,
-          assetPath,
-          content,
-          getAssetContentType(format),
-        )
-        remoteAssets.set(sha256, format)
-        uploadedAssets += 1
-        progressBar.increment()
-      },
+    console.log(
+      `Patch metadata diff check complete: ${changedPatchFiles.length}/${patchFiles.length} file(s) changed.`,
     )
-    if (assetUploads.length > 0) {
-      progressBar.stop()
-    }
 
     let syncedPatchFiles = 0
-    if (patchFiles.length > 0) {
-      console.log(`Uploading ${patchFiles.length} patch metadata file(s)...`)
-      progressBar.start(patchFiles.length, 0, { phase: 'Patches ' })
+    if (changedPatchFiles.length > 0) {
+      console.log(
+        `Uploading ${changedPatchFiles.length} patch metadata file(s)...`,
+      )
+      progressBar.start(changedPatchFiles.length, 0, { phase: 'Patches ' })
     } else {
       console.log(`No patch metadata files need uploading.`)
     }
     await processWithConcurrency(
-      patchFiles,
-      syncConcurrency,
+      changedPatchFiles,
+      syncPatchConcurrency,
       async (relativePath) => {
         const content = await readFile(join(this.patchRoot, relativePath))
         await remoteStorage.writeFile(
@@ -290,12 +320,11 @@ export class AssetStorage {
         progressBar.increment()
       },
     )
-    if (patchFiles.length > 0) {
+    if (changedPatchFiles.length > 0) {
       progressBar.stop()
     }
 
     console.log(`Uploading manifest files...`)
-    progressBar.start(2, 0, { phase: 'Manifest ' })
     const currentContent = await readFile(this.currentRefPath)
     await remoteStorage.writeFile(
       this.server,
@@ -304,16 +333,9 @@ export class AssetStorage {
       currentContent,
       'application/json',
     )
-    progressBar.increment()
-    await this.writeRemoteJson(
-      `${pathSegment.patches}/${manifestVersion}/${assetFileListPath}`,
-      localAssetFileList,
-    )
-    progressBar.increment()
-    progressBar.stop()
 
     console.log(
-      `Synced ${uploadedAssets} asset file(s), ${syncedPatchFiles} patch metadata file(s), and current.json to storage '${this.getRemoteStorageName()}'${version ? ` for ${version}` : ''}.`,
+      `Synced ${syncedPatchFiles} patch metadata file(s), and current.json to storage '${this.getRemoteStorageName()}'${version ? ` for ${version}` : ''}.`,
     )
   }
 
@@ -458,6 +480,38 @@ export class AssetStorage {
     }
 
     return remoteAssets
+  }
+
+  private async collectChangedPatchFiles(
+    patchFiles: string[],
+  ): Promise<string[]> {
+    if (patchFiles.length === 0) {
+      return []
+    }
+
+    const changedPatchFiles: string[] = []
+
+    console.log(
+      `Checking ${patchFiles.length} patch metadata file(s) for remote diffs...`,
+    )
+    await processWithConcurrency(
+      patchFiles,
+      syncPatchConcurrency,
+      async (relativePath) => {
+        const localContent = await readFile(join(this.patchRoot, relativePath))
+        const remoteContent = await this.remoteStorage?.readFile(
+          this.server,
+          uiStoragePathKey,
+          `${pathSegment.patches}/${relativePath}`,
+        )
+
+        if (!remoteContent || !localContent.equals(remoteContent)) {
+          changedPatchFiles.push(relativePath)
+        }
+      },
+    )
+
+    return changedPatchFiles.sort()
   }
 
   private async listLocalFiles(
