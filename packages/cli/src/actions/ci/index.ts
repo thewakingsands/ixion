@@ -1,5 +1,6 @@
 import { getStorageManager } from '../../utils/storage'
 import { createConfigFromTemplate } from './init'
+import { processAssets } from './steps/assets'
 import { createRelease } from './steps/release'
 import { checkAndUpdateVersions } from './steps/update'
 
@@ -25,7 +26,14 @@ export const ciUpdateCommand = async ({
       allowMissingRemoteVersion,
     )
 
-    // Step 3: Check if versions changed and create releases
+    // Step 3: Process reusable asset outputs
+    if (skipUpdate) {
+      console.log('\nSkipping asset processing...')
+    } else {
+      await processAssets()
+    }
+
+    // Step 4: Check if versions changed and create releases
     await createRelease(currentVersions, forceRelease)
 
     console.log('\n✅ CI actions completed successfully')
