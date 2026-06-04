@@ -32,6 +32,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
+      - uses: ilammy/setup-nasm@v1
+
       - name: Install dependencies
         run: pnpm install
 
