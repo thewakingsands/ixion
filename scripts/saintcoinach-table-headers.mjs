@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { exdFixtures } from './config.mjs'
 
 const library = process.argv[2]
 if (!library) {
@@ -39,11 +40,6 @@ for (const file of readdirSync(library)) {
 }
 
 writeFileSync(
-  fileURLToPath(
-    new URL(
-      '../packages/exd/test/__fixtures__/saintcoinach.json',
-      import.meta.url,
-    ),
-  ),
+  join(exdFixtures, 'saintcoinach.json'),
   JSON.stringify(output, null, 2),
 )
