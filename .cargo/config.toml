@@ -1,0 +1,5 @@
+[registries.crates-io]
+protocol = "sparse"
+
+[http]
+multiplexing = false
