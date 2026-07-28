@@ -34,6 +34,8 @@ jobs:
 
       - name: Update EXDSchema submodule
         run: |
+          git -C lib/EXDSchema fetch --depth=1 origin \
+            +refs/heads/latest:refs/remotes/origin/latest
           git submodule update --remote -- lib/EXDSchema
 
           if git diff --quiet -- lib/EXDSchema; then
