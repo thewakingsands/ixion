@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import {
   type DefinitionProvider,
+  EXDSchemaDefinitionProvider,
   SaintcoinachDefinitionProvider,
 } from '@ffcafe/ixion-exd'
 import { type Language, languageMap } from '@ffcafe/ixion-utils'
@@ -27,7 +28,16 @@ export function parseInputLanguages(input?: string[]): Language[] {
 
 export function parseInputDefinitions(
   saintcoinach?: string,
+  exdSchema?: string,
 ): DefinitionProvider {
+  if (saintcoinach && exdSchema) {
+    throw new Error('--saintcoinach and --exd-schema are mutually exclusive')
+  }
+
+  if (exdSchema) {
+    return new EXDSchemaDefinitionProvider(exdSchema)
+  }
+
   return new SaintcoinachDefinitionProvider(
     saintcoinach ||
       join(getWorkingDir(), 'lib/SaintCoinach/SaintCoinach/Definitions'),

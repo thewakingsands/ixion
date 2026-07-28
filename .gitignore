@@ -1,6 +1,7 @@
 node_modules
 dist
 coverage
+.pnpm-store
 
 # Temporary workspace directories
 temp-*

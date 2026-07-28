@@ -365,6 +365,7 @@ export function registerExdCommand(program: Command) {
           server?: string
           version?: string
           saintcoinach?: string
+          exdSchema?: string
           language?: string[]
           format?: string
           crlf?: boolean
@@ -374,7 +375,10 @@ export function registerExdCommand(program: Command) {
       ) => {
         try {
           // Get definition directory
-          const definitions = parseInputDefinitions(options.saintcoinach)
+          const definitions = parseInputDefinitions(
+            options.saintcoinach,
+            options.exdSchema,
+          )
 
           const server = options.server
           if (!server) {
