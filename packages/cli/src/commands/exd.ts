@@ -351,6 +351,11 @@ export function registerExdCommand(program: Command) {
     )
     .option('--crlf', 'Use CRLF line endings instead of LF', false)
     .option(
+      '--skip-first-line',
+      'Skip the first CSV header line (key,0,1,...)',
+      false,
+    )
+    .option(
       '--root-only',
       'Only export files in the exd/ directory, ignore subdirectories',
     )
@@ -369,6 +374,7 @@ export function registerExdCommand(program: Command) {
           language?: string[]
           format?: string
           crlf?: boolean
+          skipFirstLine?: boolean
           rootOnly?: boolean
           name?: string[]
         },
@@ -419,6 +425,7 @@ export function registerExdCommand(program: Command) {
             format,
             definitions,
             crlf: options.crlf || false,
+            skipFirstLine: options.skipFirstLine || false,
             filter,
           })
         } catch (error) {

@@ -50,6 +50,8 @@ const csvName = (sheet: string, language?: Language) => {
 interface CSVExporterOptions {
   definitions: DefinitionProvider
   crlf?: boolean
+  /** Skip the `key,0,1,...` header row. */
+  skipFirstLine?: boolean
   /**
    * Show a progress bar for sheets when exporting.
    * Defaults to true.
@@ -67,11 +69,16 @@ export class CSVExporter {
   async formatHeader(sheet: string, columns: ExcelColumn[]): Promise<string[]> {
     const fields = await this.definitions.getFlatFields(sheet, columns)
 
-    return [
-      `key,${columns.map((_, index) => index).join(',')}`,
+    const header = [
       `#,${columns.map((_, i) => fields[i]?.name || '').join(',')}`,
       `int32,${columns.map(({ type }, index) => fields[index]?.link || getSaintcoinachType(type)).join(',')}`,
     ]
+
+    if (!this.options.skipFirstLine) {
+      header.unshift(`key,${columns.map((_, index) => index).join(',')}`)
+    }
+
+    return header
   }
 
   formatData(id: string | number, data: any[]): string {

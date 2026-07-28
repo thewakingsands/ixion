@@ -22,6 +22,7 @@ export async function exportExdFilesToCSV({
   format,
   definitions,
   crlf,
+  skipFirstLine,
   filter,
 }: {
   server: string
@@ -31,6 +32,7 @@ export async function exportExdFilesToCSV({
   format: ExdCSVFormat
   definitions: DefinitionProvider
   crlf: boolean
+  skipFirstLine?: boolean
   filter?: (path: string) => boolean
 }) {
   const storageManager = getStorageManager()
@@ -52,6 +54,7 @@ export async function exportExdFilesToCSV({
     const csvExporter = new CSVExporter({
       definitions,
       crlf,
+      skipFirstLine,
     })
     await storageManager.downloadVersion(server, localVersion, tempDir)
 
