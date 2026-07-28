@@ -19,13 +19,41 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  update-exd-schema:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}
+          submodules: true
+
+      - name: Update EXDSchema submodule
+        run: |
+          git submodule update --remote -- lib/EXDSchema
+
+          if git diff --quiet -- lib/EXDSchema; then
+            echo "EXDSchema is already up to date"
+          else
+            git config user.name "FFCAFE Automation"
+            git config user.email "actions@github.com"
+            git add lib/EXDSchema
+            git commit -m "chore: update EXDSchema"
+            git push
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    needs: update-exd-schema
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
           submodules: true
 
       - name: Setup Node.js
@@ -146,6 +174,62 @@ jobs:
           message: "ver ${{ steps.export-csv.outputs.version }}"
           tag: "ver-${{ steps.export-csv.outputs.version }} --force"
           tag_push: "--force"
+
+  datamining-cn-exd-schema:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ixion-cli
+
+      - name: Extract CLI artifact
+        run: tar -xf ixion-cli.tar
+
+      - name: Checkout datamining-cn
+        uses: actions/checkout@v5
+        with:
+          repository: thewakingsands/ffxiv-datamining-cn
+          path: ffxiv-datamining-cn
+          ssh-key: ${{ secrets.SSH_KEY }}
+
+      - name: Checkout exd-schema branch
+        working-directory: ffxiv-datamining-cn
+        run: |
+          if git fetch origin exd-schema:refs/remotes/origin/exd-schema; then
+            git checkout -B exd-schema origin/exd-schema
+            git branch --set-upstream-to=origin/exd-schema exd-schema
+          else
+            git checkout -b exd-schema
+            git push --set-upstream origin exd-schema
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Export CSV with EXDSchema
+        id: export-csv
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+        run: |
+          node packages/cli/dist/index.js ci init
+          node packages/cli/dist/index.js exd export-csv ffxiv-datamining-cn -s sdo --crlf --exd-schema lib/EXDSchema --skip-first-line
+
+      - name: Commit
+        uses: EndBug/add-and-commit@v9
+        with:
+          cwd: ffxiv-datamining-cn
+          default_author: github_actions
+          author_name: FFCAFE Automation
+          message: "EXDSchema ver ${{ steps.export-csv.outputs.version }}"
 
   datamining-tc:
     runs-on: ubuntu-latest
