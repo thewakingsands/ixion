@@ -52,8 +52,25 @@ const typeMap: Record<string, string> = {
 function generateFlatFields(schema: EXDSchema) {
   const fields: FlatField[] = []
 
-  const currentIndex = 0
-  const processData = (data: NamedFieldSchema, suffix: string = '') => {
+  const processData = (data: UnnamedFieldSchema, name: string) => {
+    if (data.type === 'array') {
+      for (let i = 0; i < data.count; i++) {
+        const prefix = `${name}${i}`
+        if (!data.fields) {
+          processData({}, prefix)
+        } else {
+          for (const raw of data.fields) {
+            const named = NamedFieldSchema.safeParse(raw)
+            if (named.success) {
+              processData(named.data, `${prefix}${named.data.name}`)
+            } else {
+              processData(UnnamedFieldSchema.parse(raw), prefix)
+            }
+          }
+        }
+      }
+      return
+    }
     if (data.type === 'link') {
       let link: string | undefined
       if (data.targets) {
@@ -62,27 +79,21 @@ function generateFlatFields(schema: EXDSchema) {
         link = data.condition.switch
       }
       fields.push({
-        index: currentIndex,
-        name: data.name,
+        index: fields.length,
+        name,
         link,
-      })
-    } else if (data.type === 'array') {
-      fields.push({
-        index: currentIndex,
-        name: data.name,
-        link: '',
       })
     } else {
       fields.push({
-        index: currentIndex,
-        name: data.name,
+        index: fields.length,
+        name,
         link: (data.type && typeMap[data.type]) || '',
       })
     }
   }
 
   for (const field of schema.fields) {
-    processData(field)
+    processData(field, field.name)
   }
 
   return fields
@@ -122,7 +133,12 @@ export class EXDSchemaDefinitionProvider implements DefinitionProvider {
       const offsetIndex = i
       const columnIndex = columnWithIndex[i].index
 
-      result[columnIndex] = fields[offsetIndex]
+      const field = fields[offsetIndex]
+      result[columnIndex] = {
+        ...field,
+        index: columnIndex,
+        name: field?.name ?? '',
+      }
     }
 
     return result
