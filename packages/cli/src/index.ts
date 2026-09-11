@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import { registerAssetCommand } from './commands/asset'
 import { registerCiCommand } from './commands/ci'
 import { registerExdCommand } from './commands/exd'
+import { registerFateCommand } from './commands/fate'
 import { registerPatchCommand } from './commands/patch'
 import { registerRecordCommand } from './commands/record'
 import { registerStorageCommand } from './commands/storage'
@@ -14,6 +15,7 @@ program.name('ixion').description('CLI to FFXIV Patches').version('0.8.0')
 registerAssetCommand(program)
 registerCiCommand(program)
 registerExdCommand(program)
+registerFateCommand(program)
 registerPatchCommand(program)
 registerRecordCommand(program)
 registerStorageCommand(program)
