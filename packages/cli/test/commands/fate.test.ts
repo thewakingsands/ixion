@@ -1,10 +1,26 @@
-import { EXDSchemaDefinitionProvider } from '@ffcafe/ixion-exd'
+import { EXDSchemaDefinitionProvider, SaintcoinachDefinitionProvider } from '@ffcafe/ixion-exd'
 import { Command } from 'commander'
 import { expect, it, vi } from 'vitest'
 import { exportFateLocations } from '../../src/actions/fate-export'
 import { registerFateCommand } from '../../src/commands/fate'
 
 vi.mock('../../src/actions/fate-export', () => ({ exportFateLocations: vi.fn() }))
+
+it('defaults to EXDSchema without changing the output filename', async () => {
+  vi.mocked(exportFateLocations).mockClear()
+  const program = new Command()
+  registerFateCommand(program)
+  await program.parseAsync(['fate', 'export-locations', 'game', 'outputs/fate-locations.json'], { from: 'user' })
+  expect(exportFateLocations).toHaveBeenCalledWith('game', 'outputs/fate-locations.json', expect.any(EXDSchemaDefinitionProvider))
+})
+
+it('allows an explicit SaintCoinach override', async () => {
+  vi.mocked(exportFateLocations).mockClear()
+  const program = new Command()
+  registerFateCommand(program)
+  await program.parseAsync(['fate', 'export-locations', 'game', 'out.json', '--saintcoinach', 'definitions'], { from: 'user' })
+  expect(exportFateLocations).toHaveBeenCalledWith('game', 'out.json', expect.any(SaintcoinachDefinitionProvider))
+})
 
 it('passes --exd-schema to the FATE exporter', async () => {
   vi.mocked(exportFateLocations).mockClear()

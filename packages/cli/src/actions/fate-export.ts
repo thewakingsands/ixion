@@ -102,11 +102,18 @@ export interface FateLocation {
   position: { map: number; zoneid: number; x: number; y: number; z: number }
 }
 
+export interface DynamicEventLocation extends Omit<FateLocation, 'fateId'> {
+  dynamicEventId: number
+}
+
 export async function collectFateLocations(
   reader: ResourceReader,
   definitions: DefinitionProvider,
 ) {
   const fates = await readSheet(reader, definitions, 'Fate', ['Location'])
+  const dynamicEvents = await readSheet(reader, definitions, 'DynamicEvent', [
+    'LGBEventObject',
+  ])
   const territories = await readSheet(reader, definitions, 'TerritoryType', [
     'Bg',
     'Map',
@@ -124,6 +131,16 @@ export async function collectFateLocations(
     byLocation.set(location, [...(byLocation.get(location) ?? []), id])
   }
   const locations: FateLocation[] = []
+  const dynamicEventLocations: DynamicEventLocation[] = []
+  const dynamicByLocation = new Map<number, number[]>()
+  for (const [id, event] of dynamicEvents) {
+    const location = number(event, 'LGBEventObject')
+    if (!location) continue
+    dynamicByLocation.set(location, [
+      ...(dynamicByLocation.get(location) ?? []),
+      id,
+    ])
+  }
   const missingLgbFiles: string[] = []
   const cache = new Map<string, ReturnType<typeof readLgbFile> | null>()
   for (const [territoryId, territory] of territories) {
@@ -154,8 +171,10 @@ export async function collectFateLocations(
       if (!lgb) continue
       for (const layer of lgb.layers) {
         for (const object of layer.instanceObjects) {
-          if (object.assetType !== 49) continue
-          const ids = byLocation.get(object.instanceId)
+          if (object.assetType !== 49 && object.assetType !== 45) continue
+          const ids = (
+            object.assetType === 45 ? dynamicByLocation : byLocation
+          ).get(object.instanceId)
           if (!ids) continue
           const world = object.transform.translation
           const coords = fateMapCoordinates(
@@ -165,9 +184,8 @@ export async function collectFateLocations(
             number(map, 'OffsetY'),
           )
           if (coords.x < 0 || coords.y < 0) continue
-          for (const fateId of ids) {
-            locations.push({
-              fateId,
+          for (const id of ids) {
+            const placement = {
               location: object.instanceId,
               territoryId,
               layerId: layer.layerId,
@@ -178,13 +196,32 @@ export async function collectFateLocations(
                 zoneid: number(map, 'PlaceName'),
                 ...coords,
               },
-            })
+            }
+            if (object.assetType === 45) {
+              dynamicEventLocations.push({ dynamicEventId: id, ...placement })
+            } else {
+              locations.push({ fateId: id, ...placement })
+            }
           }
         }
       }
     }
   }
   const matched = new Set(locations.map((entry) => entry.fateId))
+  const matchedDynamicEvents = new Set(
+    dynamicEventLocations.map((entry) => entry.dynamicEventId),
+  )
+  const unmatchedDynamicEventIds = [...dynamicByLocation.values()]
+    .flat()
+    .filter((id) => !matchedDynamicEvents.has(id))
+    .sort((a, b) => a - b)
+  dynamicEventLocations.sort(
+    (a, b) =>
+      a.dynamicEventId - b.dynamicEventId ||
+      a.territoryId - b.territoryId ||
+      a.lgbPath.localeCompare(b.lgbPath) ||
+      a.layerId - b.layerId,
+  )
   const unmatchedFateIds = [...byLocation.values()]
     .flat()
     .filter((id) => !matched.has(id))
@@ -198,6 +235,8 @@ export async function collectFateLocations(
   )
   return {
     locations,
+    dynamicEventLocations,
+    unmatchedDynamicEventIds,
     unmatchedFateIds,
     missingLgbFiles: missingLgbFiles.sort(),
   }
@@ -211,14 +250,14 @@ export async function exportFateLocations(
   const reader = new GameSqPackReader(gamePath)
   try {
     const result = await collectFateLocations(reader, definitions)
-    if (!result.locations.length)
+    if (!result.locations.length && !result.dynamicEventLocations.length)
       throw new Error(
-        'No FATE locations found; check the game directory and definitions',
+        'No FATE or DynamicEvent locations found; check the game directory and definitions',
       )
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, `${JSON.stringify(result, null, 2)}\n`)
     console.log(
-      `Exported ${result.locations.length} FATE locations to ${output}; ${result.unmatchedFateIds.length} unmatched FATEs, ${result.missingLgbFiles.length} missing LGB files`,
+      `Exported ${result.locations.length} FATE and ${result.dynamicEventLocations.length} DynamicEvent locations to ${output}; ${result.unmatchedFateIds.length} unmatched FATEs, ${result.unmatchedDynamicEventIds.length} unmatched DynamicEvents, ${result.missingLgbFiles.length} missing LGB files`,
     )
   } finally {
     await reader.close()

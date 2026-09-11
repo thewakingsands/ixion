@@ -21,6 +21,7 @@ function input() {
   }
   // Shared locations must match all FATE rows, not only the first one.
   sheet('Fate', ['Location'], [{ rowId: 1, data: [123] }, { rowId: 2, data: [123] }, { rowId: 3, data: [999] }, { rowId: 4, data: [0] }])
+  sheet('DynamicEvent', ['LGBEventObject'], [{ rowId: 1, data: [8373717] }, { rowId: 2, data: [8373717] }, { rowId: 3, data: [123] }, { rowId: 4, data: [0] }])
   sheet('TerritoryType', ['Bg', 'Map'], [{ rowId: 100, data: [Buffer.from('ffxiv/test/level/test.lvb'), 10] }])
   sheet('Map', ['SizeFactor', 'Offset{X}', 'Offset{Y}', 'PlaceName'], [{ rowId: 10, data: [100, 0, 0, 77] }])
   const data = Buffer.alloc(144)
@@ -78,6 +79,22 @@ it('fails on missing required EXD data instead of returning a partial export', a
   const { reader, definitions, files } = input()
   files.delete('exd/Fate_0.exd')
   await expect(collectFateLocations(reader, definitions)).rejects.toThrow('Missing game resource')
+})
+
+it('exports type 45 DynamicEvents separately and does not match type 49 objects', async () => {
+  const { reader, definitions, files } = input()
+  const data = Buffer.from(files.get('bg/ffxiv/test/level/planevent.lgb')!)
+  data.writeInt32LE(45, 96)
+  data.writeInt32LE(8373717, 100)
+  data.writeFloatLE(-90, 108)
+  data.writeFloatLE(18, 112)
+  data.writeFloatLE(700, 116)
+  files.set('bg/ffxiv/test/level/planmap.lgb', data)
+  const result = await collectFateLocations(reader, definitions)
+  expect(result.locations.map((entry) => entry.fateId)).toEqual([1, 2])
+  expect(result.dynamicEventLocations.map((entry) => entry.dynamicEventId)).toEqual([1, 2])
+  expect(result.dynamicEventLocations[0]).toMatchObject({ location: 8373717, world: { x: -90, y: 18, z: 700 }, lgbPath: 'bg/ffxiv/test/level/planmap.lgb' })
+  expect(result.unmatchedDynamicEventIds).toEqual([3])
 })
 
 it('rejects incompatible definitions', async () => {
