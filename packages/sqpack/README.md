@@ -59,3 +59,31 @@ pnpm test
 ## References
 
 Based on the [XIV Dev SqPack documentation](https://xiv.dev/data-files/sqpack#reading-index-data).
+
+## Local game resources and LGB
+
+```ts
+import { GameSqPackReader, resolveSqPackPrefix, readLgbFile } from '@ffcafe/ixion-sqpack'
+
+const resource = 'bg/ffxiv/sea_s1/twn/s1t1/level/bg.lgb'
+const prefix = await resolveSqPackPrefix('/path/to/game', resource)
+// /path/to/game/sqpack/ffxiv/020000 (null if not installed)
+
+const game = new GameSqPackReader('/path/to/game')
+try {
+  const data = await game.readFile(resource)
+  const lgb = data ? readLgbFile(data) : null
+} finally {
+  await game.close()
+}
+```
+
+The local reader normalizes resource paths, selects the category and expansion,
+then searches installed Windows indexes across all chunks. It supports index2-only
+packs and caches indexes for repeated reads. Returned prefixes exclude `.win32`;
+append it when constructing a `SqPackReader` directly.
+
+`readLgbFile` decodes LGB1/LGP1 headers, layer IDs/names/festivals, instance
+types/IDs/names, and translation/rotation/scale. Asset-specific payloads and layer
+reference lists are not decoded. Unknown asset types retain their common metadata.
+Invalid signatures, sizes, offsets and unterminated strings throw errors.
