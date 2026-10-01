@@ -11,6 +11,7 @@ import { expect, it, vi } from 'vitest'
 import { extractLocalUiAssets } from '../../src/actions/asset-local'
 import { syncUiAssetsToRemoteStorage } from '../../src/actions/asset-ui-icons'
 import { createAssetStateEntry, processTextures } from '../../src/actions/asset/patch'
+import { BinaryAssetIndex } from '../../src/actions/asset/binary-index'
 import { AssetStorage } from '../../src/actions/asset/storage'
 import type { UiAssetEntry } from '../../src/actions/asset/types'
 import { generateLocalAssetPaths, validateIndexFile } from '../../src/actions/asset/ui-index'
@@ -135,6 +136,18 @@ it('uses real SqPack indexes for patch selection and full local extraction', asy
     expect(JSON.parse(await readFile(join(output, 'references.json'), 'utf8'))).toEqual(references)
     expect(JSON.parse(await readFile(join(manifests, 'icons.json'), 'utf8'))).toHaveLength(6)
     expect(JSON.parse(await readFile(join(manifests, 'maps.json'), 'utf8'))).toHaveLength(1)
+    const binary = new BinaryAssetIndex(await readFile(join(manifests, 'assets.bin')))
+    expect(binary.count).toBe(7)
+    for (const path of [icon, map, ...extraIcons]) expect(binary.lookup(path)).toBeDefined()
+    const originalJson = await readFile(join(manifests, 'icons.json'))
+    const originalBinary = await readFile(join(manifests, 'assets.bin'))
+    const collisionPaths = ['ui/icon/000000/15f019c1.tex', 'ui/icon/000000/2be409ef.tex']
+    const collisionState = new Map<string, UiAssetEntry>(collisionPaths.map((path) => [path, {
+      path, id: 0, version: '', hr: false, sha256: '01'.repeat(32), format: 'webp',
+    }]))
+    await expect(new AssetStorage({ server }).writeAssetState(version, collisionState)).rejects.toThrow('collision')
+    expect(await readFile(join(manifests, 'icons.json'))).toEqual(originalJson)
+    expect(await readFile(join(manifests, 'assets.bin'))).toEqual(originalBinary)
     const assetFiles = JSON.parse(await readFile(join(manifests, 'asset-files.json'), 'utf8')) as string[]
     expect(assetFiles).toHaveLength(2)
     expect(['same texture', 'unreferenced']).toContain((await readFile(join(output, assetFiles[0]))).toString())
@@ -160,6 +173,10 @@ it('uses real SqPack indexes for patch selection and full local extraction', asy
     const uploadedPaths = uploads.mock.calls.map((call) => call[2])
     expect(uploadedPaths.indexOf(assetFiles[0])).toBeLessThan(uploadedPaths.indexOf(`patches/${version}/maps.json`))
     expect(uploadedPaths.at(-1)).toBe('current.json')
+    const binaryPath = `patches/${version}/assets.bin`
+    expect(await remote.readFile(server, 'ui', binaryPath)).toEqual(await readFile(join(manifests, 'assets.bin')))
+    expect(uploadedPaths.indexOf(assetFiles[0])).toBeLessThan(uploadedPaths.indexOf(binaryPath))
+    expect(uploads.mock.calls.find((call) => call[2] === binaryPath)?.[4]).toBe('application/octet-stream')
     expect(uploadedPaths.filter((path) => path.startsWith('assets/'))).toEqual([assetFiles[0]])
     expect(listing).not.toHaveBeenCalled()
     uploads.mockClear()
@@ -192,6 +209,18 @@ it('uses real SqPack indexes for patch selection and full local extraction', asy
       } finally {
         failure.mockRestore()
       }
+    }
+    const local = manager.findLocalStorage()!
+    const writeLocal = local.writeFile.bind(local)
+    const binaryWriteFailure = vi.spyOn(local, 'writeFile').mockImplementation(async (...args) => {
+      if (args[2].endsWith('/assets.bin')) throw new Error('failed binary index write')
+      return writeLocal(...args)
+    })
+    try {
+      await expect(extractLocalUiAssets(game, definitions, { server })).rejects.toThrow('failed binary index write')
+      expect(await readFile(join(output, 'current.json'), 'utf8')).toBe(localCheckpoint)
+    } finally {
+      binaryWriteFailure.mockRestore()
     }
     // The fallback remains exhaustive when only index2 is installed.
     await unlink(join(pack, '060000.win32.index'))

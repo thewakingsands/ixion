@@ -7,6 +7,7 @@ import { SingleBar } from 'cli-progress'
 import { baseGameVersion, uiSqPackFile } from '../../config'
 import { PatchFileSystem } from '../../utils/patch-fs'
 import { getStorageManager } from '../../utils/storage'
+import { assetIndexFileName, encodeAssetIndex } from './binary-index'
 import { loadAssetReferences, saveAssetReferences } from './references'
 import type {
   CurrentReference,
@@ -170,6 +171,8 @@ export class AssetStorage {
 
   async writeAssetState(version: string, state: Map<string, UiAssetEntry>) {
     const entries = [...state.values()]
+    // Validate every path and reject collisions before publishing any metadata.
+    const binary = encodeAssetIndex(entries)
     await this.writePatchJson(
       version,
       'icons.json',
@@ -179,6 +182,20 @@ export class AssetStorage {
       version,
       'maps.json',
       entries.filter((entry) => 'territory' in entry),
+    )
+    const path = `${pathSegment.patches}/${version}/${assetIndexFileName}`
+    await this.localStorage.writeFile(
+      this.server,
+      uiStoragePathKey,
+      path,
+      binary,
+    )
+    await this.remoteStorage?.writeFile(
+      this.server,
+      uiStoragePathKey,
+      path,
+      binary,
+      'application/octet-stream',
     )
   }
 
@@ -640,6 +657,7 @@ function getAssetContentType(format: EncodedAssetFormat): string {
 }
 
 function getContentTypeForPath(relativePath: string): string | undefined {
+  if (relativePath.endsWith('.bin')) return 'application/octet-stream'
   if (relativePath.endsWith('.json')) {
     return 'application/json'
   }

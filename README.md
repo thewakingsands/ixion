@@ -94,6 +94,7 @@ storage/ui/sdo/
   assets/<hash-prefix>/<sha256>.webp (or .avif)
   patches/<ffxivgame.ver>/icons.json
   patches/<ffxivgame.ver>/maps.json
+  patches/<ffxivgame.ver>/assets.bin
   patches/<ffxivgame.ver>/asset-files.json
 ```
 
@@ -118,6 +119,66 @@ Manual sync compares local images with `asset-files.json` at the remote
 remote image objects. If there is no remote current reference, it uses the local
 target version; if the manifest is absent, it uploads all local images. This
 trusts the manifest and does not detect missing objects already listed there.
+
+### Unified binary asset index
+
+Both local extraction and incremental extraction write `assets.bin` alongside
+`icons.json` and `maps.json`. The binary file combines icons and map source
+textures into one path-hash lookup table; the JSON files remain the lossless
+working state for incremental extraction and compatibility with older readers.
+`asset-files.json` remains a separate cumulative image inventory. Existing
+snapshots are not converted automatically by `ui-sync`; regenerating a snapshot
+with extraction also generates its binary index. Sync uploads the binary as
+`application/octet-stream`, after images and before `current.json`.
+
+The IXAS v1 wire format uses little-endian integers and a 64-byte header:
+
+| Offset | Type | Value |
+| --- | --- | --- |
+| 0 | 4 bytes | ASCII `IXAS` |
+| 4 | uint16 | Format version: `1` |
+| 6 | uint16 | Header size: `64` |
+| 8 | uint32 | Flags: `0` |
+| 12 | uint16 | Record size: `44` |
+| 14 | uint16 | Hash kind: `1` (SqPack `.index` dual CRC32) |
+| 16 | uint32 | Record count |
+| 20 | uint32 | Record section offset: `64` |
+| 24 | uint32 | Total file size: `64 + count * 44` |
+| 28 | uint32 | Standard CRC-32/IEEE checksum of bytes `[64, EOF)` |
+| 32 | 32 bytes | Reserved: all zero |
+
+Each 44-byte record contains:
+
+| Offset | Type | Value |
+| --- | --- | --- |
+| 0 | uint32 | Filename SqPack CRC32 |
+| 4 | uint32 | Directory SqPack CRC32, excluding the final `/` |
+| 8 | 32 bytes | Existing asset SHA-256, raw bytes (not recomputed) |
+| 40 | uint8 | Format: `1=webp`, `2=avif`, `3=tex` |
+| 41 | 3 bytes | Reserved: all zero |
+
+Paths are lowercased and use `/`. v1 accepts ASCII letters, digits, `_`, `-`,
+`.` and `/`, with fewer than 260 characters, at least one directory, and no
+empty, `.` or `..` segments. Backslashes and whitespace are rejected. Hashes
+are computed by `calculateIndexHash`: the 64-bit key is
+`directoryCRC << 32 | filenameCRC`. Records are strictly sorted by this unsigned
+key. The encoder rejects duplicate normalized paths and hash collisions before
+writing snapshot metadata, including collisions pointing to the same image.
+
+SqPack path CRC32 is the complement of the standard CRC-32/IEEE result:
+`"123456789"` hashes to `0x340bc6d9`; the standard checksum is `0xcbf43926`.
+Do not apply the path-hash convention to the payload checksum. The empty payload
+checksum is zero. Readers must reject unsupported versions, flags, hash kinds,
+format codes, nonzero reserved bytes, invalid lengths/checksums and unsorted or
+duplicate keys. Use wide arithmetic for size validation.
+
+`BinaryAssetIndex` validates and owns the binary buffer and performs binary
+search by game path without creating per-record objects. SHA-256 and format
+still resolve to `assets/<first-two-hex-digits>/<sha256>.<format>`. CRCs are not
+collision-proof membership checks and cannot recover paths; this file does not
+provide path enumeration or replace JSON working state. Map composition is
+unchanged: look up `_m.tex` and `m_m.tex` separately. No territory dictionary or
+icon/map discriminator is stored.
 
 Both extraction modes use the same icon enumeration rules, map reference
 generator and texture processor. Collected icon IDs remain in references.json
