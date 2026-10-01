@@ -7,6 +7,7 @@ import { readGameTrunk, readGameVersion } from '../utils/game'
 import { getTempDir } from '../utils/root'
 import { getServerLanguages } from '../utils/server'
 import { getStorageManager } from '../utils/storage'
+import { collectGameAssetReferences } from './asset/references'
 import { verifyExdFiles } from './exd-verify'
 
 /**
@@ -24,11 +25,13 @@ export async function createVersionFromPatches(
     from,
     to,
     patches,
+    collectReferences = true,
   }: {
     server: string
     from: string
     to: string
     patches: string[]
+    collectReferences?: boolean
   },
 ) {
   // Check if patches exist
@@ -83,15 +86,21 @@ export async function createVersionFromPatches(
     }
 
     // 4. Verify contents of 0a0000.win32.dat0
+    let exdReady = false
     if (existsSync(join(workspaceDir, `${exdSqPackFile}.dat0`))) {
       try {
         await verifyExdFiles(workspaceDir, getServerLanguages(server))
+        exdReady = true
       } catch (error) {
         console.warn('⚠️ Failed to verify EXD files:', error)
       }
     } else {
       console.warn('⚠️ No EXD files found in workspace')
     }
+
+    // Some patch chains contain intermediate, incomplete EXD snapshots.
+    if (collectReferences && exdReady)
+      await collectGameAssetReferences(workspaceDir, server, storageManager)
 
     // 5. Upload the patched version to storage
     console.log(`\n📤 Uploading patched version ${to} to storage...`)
@@ -158,6 +167,8 @@ export async function createVersionFromGame(
       copyFileSync(sourcePath, targetPath)
       console.log(`✅ Copied: ${file}`)
     }
+
+    await collectGameAssetReferences(gamePath, server, storageManager)
 
     // Upload to storage
     console.log(`\n📤 Uploading version ${version} to storage...`)

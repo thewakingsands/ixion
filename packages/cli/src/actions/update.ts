@@ -11,6 +11,7 @@ export interface UpdateOptions {
   dryRun?: boolean
   server: string
   storage?: string
+  collectReferences?: boolean
 }
 
 export interface UpdateResult {
@@ -139,6 +140,7 @@ export const updateCommand = async (
           from: version,
           to: patch.version,
           patches: [patchPath],
+          collectReferences: options.collectReferences,
         })
         console.log(`✅ Patch ${patch.version} applied`)
 

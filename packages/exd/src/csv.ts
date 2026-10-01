@@ -10,6 +10,7 @@ import {
 } from '@ffcafe/ixion-sqpack'
 import { formatLanguage, formatLanguages, Language } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
+import type { AssetReferenceCollector } from './asset-references'
 import type { DefinitionProvider } from './schema/interface'
 import { getSaintcoinachType } from './schema/utils'
 import { formatSeString, parseSeString } from './sestring'
@@ -48,6 +49,7 @@ const csvName = (sheet: string, language?: Language) => {
 }
 
 interface CSVExporterOptions {
+  assetReferences?: AssetReferenceCollector
   definitions: DefinitionProvider
   crlf?: boolean
   /** Skip the `key,0,1,...` header row. */
@@ -246,6 +248,9 @@ export class CSVExporter {
     }
 
     const header = await this.formatHeader(sheet, exdHeader.columns)
+    const assetFields = this.options.assetReferences
+      ? await this.definitions.getFlatFields(sheet, exdHeader.columns)
+      : []
     const lines: string[] = [...header]
 
     for (const pagination of exdHeader.paginations) {
@@ -263,6 +268,7 @@ export class CSVExporter {
             index++
           ) {
             const { subRowId, data } = exdReader.readSubrow(rowId, index)
+            this.options.assetReferences?.observe(sheet, assetFields, data)
             try {
               lines.push(this.formatData(`${rowId}.${subRowId}`, data))
             } catch (error) {
@@ -275,6 +281,7 @@ export class CSVExporter {
           }
         } else {
           const row = exdReader.readRow(rowId)
+          this.options.assetReferences?.observe(sheet, assetFields, row)
           try {
             lines.push(this.formatData(rowId, row))
           } catch (error) {

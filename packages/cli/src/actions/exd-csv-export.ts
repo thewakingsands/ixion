@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  AssetReferenceCollector,
   CSVExporter,
   type DefinitionProvider,
   ExdCSVFormat,
@@ -11,6 +12,7 @@ import type { Language } from '@ffcafe/ixion-utils'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'
+import { saveAssetReferences } from './asset/references'
 import { isGitHubActions, writeGithubOutput } from './ci/github'
 import { ExdBase, type ServerVersion } from './exd-base'
 
@@ -51,7 +53,9 @@ export async function exportExdFilesToCSV({
   // Download version to temporary directory
   const tempDir = await getTempDir()
   try {
+    const assetReferences = new AssetReferenceCollector()
     const csvExporter = new CSVExporter({
+      assetReferences,
       definitions,
       crlf,
       skipFirstLine,
@@ -66,6 +70,11 @@ export async function exportExdFilesToCSV({
     await mkdir(outputDir, { recursive: true })
     await csvExporter.export([{ reader, languages }], format, outputDir, filter)
     await reader.close()
+    await saveAssetReferences(
+      server,
+      storageManager.getAllStorages(),
+      assetReferences.toJSON(),
+    )
 
     console.log(`✅ CSV export completed`)
   } finally {
@@ -80,16 +89,22 @@ export async function exportAllRawExd({
   serverVersions,
   outputDir,
   filter,
+  collectReferences = true,
 }: {
   definitions: DefinitionProvider
   crlf: boolean
   serverVersions: ServerVersion[]
   outputDir: string
   filter?: (path: string) => boolean
+  collectReferences?: boolean
 }) {
   const exdBase = new ExdBase(serverVersions)
   try {
+    const assetReferences = collectReferences
+      ? new AssetReferenceCollector()
+      : undefined
     const csvExporter = new CSVExporter({
+      assetReferences,
       definitions,
       crlf,
     })
@@ -108,6 +123,14 @@ export async function exportAllRawExd({
       filter,
     )
 
+    if (assetReferences)
+      for (const { server } of serverVersions) {
+        await saveAssetReferences(
+          server,
+          getStorageManager().getAllStorages(),
+          assetReferences.toJSON(),
+        )
+      }
     console.log(`✅ allrawexd export completed`)
   } finally {
     await exdBase.close()

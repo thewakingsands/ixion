@@ -1,3 +1,4 @@
+import { generateIconDirectories } from '@ffcafe/ixion-exd'
 import {
   crc32,
   type IndexDirectoryHashTableEntry,
@@ -18,22 +19,17 @@ export interface ResolvedDirectoryIndex {
   files: Map<bigint, ResolvedFileIndex>
 }
 
-const iconVariants = ['', '/en', '/ja', '/fr', '/de', '/hq', '/chs']
 export function buildIconDirectoryHashes() {
   const map = new Map<number, string>()
 
-  for (let prefix = 0; prefix < 1000; prefix += 1) {
-    const group = `${prefix.toString().padStart(3, '0')}000`
-    for (const version of iconVariants) {
-      const dirPath = `ui/icon/${group}${version}`
-      const dirHash = crc32(dirPath)
+  for (const dirPath of generateIconDirectories()) {
+    const dirHash = crc32(dirPath)
 
-      const existed = map.get(dirHash)
-      if (map.has(dirHash)) {
-        console.warn(`Hash of ${dirPath} duplicates with ${existed}`)
-      } else {
-        map.set(dirHash, dirPath)
-      }
+    const existed = map.get(dirHash)
+    if (map.has(dirHash)) {
+      console.warn(`Hash of ${dirPath} duplicates with ${existed}`)
+    } else {
+      map.set(dirHash, dirPath)
     }
   }
 

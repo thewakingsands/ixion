@@ -2,14 +2,13 @@ import { baseGameVersion, bootVersion } from '../config'
 import { downloadPatch } from '../utils/download'
 import { getWorkingDir } from '../utils/root'
 import { requestServerPatches } from '../utils/server'
-import {
-  buildIconDirectoryHashes,
-  type ResolvedDirectoryIndex,
-  type ResolvedIndexMap,
+import type {
+  ResolvedDirectoryIndex,
+  ResolvedIndexMap,
 } from '../utils/sqpack-index'
 import { processTextures, type TextureChanges } from './asset/patch'
 import { AssetStorage } from './asset/storage'
-import type { IconEntry } from './asset/types'
+import type { UiAssetEntry } from './asset/types'
 import { validateIndexFile } from './asset/ui-index'
 
 const assetFileListPath = 'asset-files.json'
@@ -39,15 +38,15 @@ export async function extractUiPatchIcons(
   const storage = new AssetStorage(options)
   const currentReference = await storage.loadCurrentReference()
   const fromVersion = currentReference.lastValidIndex
+  const references = await storage.loadReferences()
   await storage.loadExistingAssets(fromVersion)
-  const iconState = await storage.loadIconState(fromVersion)
+  const iconState = await storage.loadAssetState(fromVersion)
   let previousUiIndex: ResolvedIndexMap | undefined
 
   if (fromVersion !== baseGameVersion) {
     await storage.fs.loadState()
     previousUiIndex =
-      (await validateIndexFile(storage.fs, buildIconDirectoryHashes())) ??
-      undefined
+      (await validateIndexFile(storage.fs, references)) ?? undefined
   }
 
   const gameVersions = {
@@ -64,13 +63,29 @@ export async function extractUiPatchIcons(
   }
 
   if (ffxivPatches.length === 0) {
+    // A reference can be discovered without any new UI patch (e.g. schema updates).
+    if (previousUiIndex) {
+      const changes = await processTextures({
+        storage,
+        iconState,
+        uiIndex: previousUiIndex,
+        onlyMissing: true,
+      })
+      await storage.writeAssetState(fromVersion, iconState)
+      await storage.writePatchJson(
+        fromVersion,
+        assetFileListPath,
+        storage.getAssetFileList(),
+      )
+      if (hasIconChanges(changes))
+        await storage.writePatchJson(fromVersion, 'changes.json', changes)
+      console.log(formatTextureChangeSummary(changes))
+    }
     console.log(
       `No ${options.server} main-game UI patches to process after ${fromVersion}.`,
     )
     return
   }
-
-  const iconDirectoryHashes = buildIconDirectoryHashes()
 
   console.log(
     `Processing ${ffxivPatches.length} ${options.server} main-game patch(es) from ${fromVersion}.`,
@@ -92,7 +107,7 @@ export async function extractUiPatchIcons(
     await storage.fs.applyPatch(patchPath)
 
     console.log(`  Validating UI index...`)
-    const uiIndex = await validateIndexFile(storage.fs, iconDirectoryHashes)
+    const uiIndex = await validateIndexFile(storage.fs, references)
     if (!uiIndex) {
       console.log(
         `  UI index is invalid; skipping patch metadata and keeping last valid index at ${currentReference.lastValidIndex}.`,
@@ -106,7 +121,7 @@ export async function extractUiPatchIcons(
     }
 
     console.log(
-      `  UI index valid with ${countResolvedIndexFiles(uiIndex)} icon file(s).`,
+      `  UI index valid with ${countResolvedIndexFiles(uiIndex)} referenced file(s).`,
     )
 
     console.log(`  Writing resolved index snapshot...`)
@@ -129,15 +144,10 @@ export async function extractUiPatchIcons(
 
     console.log(`  ${formatTextureChangeSummary(changes)}`)
 
-    const serializedIconState = serializeIconState(iconState)
     const assetFileList = storage.getAssetFileList()
     console.log(`  Writing patch metadata...`)
     await storage.writePatchJson(patch.version, 'changes.json', changes)
-    await storage.writePatchJson(
-      patch.version,
-      'icons.json',
-      serializedIconState,
-    )
+    await storage.writeAssetState(patch.version, iconState)
     await storage.writePatchJson(
       patch.version,
       assetFileListPath,
@@ -172,13 +182,15 @@ export async function resolveSavedUiIconState(
   await storage.loadExistingAssets(currentVersion.lastValidIndex)
   await storage.fs.loadState()
 
-  const iconDirectoryHashes = buildIconDirectoryHashes()
-  const uiIndex = await validateIndexFile(storage.fs, iconDirectoryHashes)
+  const uiIndex = await validateIndexFile(
+    storage.fs,
+    await storage.loadReferences(),
+  )
   if (!uiIndex) {
     throw new Error('Invalid uiIndex')
   }
 
-  const iconState = new Map<string, IconEntry>()
+  const iconState = new Map<string, UiAssetEntry>()
   const result = await processTextures({
     storage,
     iconState,
@@ -186,17 +198,18 @@ export async function resolveSavedUiIconState(
   })
 
   console.log(result)
+  await storage.writePatchJson(
+    currentVersion.lastValidIndex,
+    `${options.output ?? 'saved-state'}.json`,
+    [...iconState.values()],
+  )
 }
 
 export async function syncUiAssetsToRemoteStorage(
   options: AssetUiIconsSyncOptions,
 ): Promise<void> {
   const storage = new AssetStorage(options)
-  await storage.syncToRemote(options.version)
-}
-
-function serializeIconState(iconState: Map<string, IconEntry>) {
-  return [...iconState.values()]
+  await storage.syncToRemote(options.version, { syncAssets: true })
 }
 
 function serializeResolvedIndexMap(
@@ -227,7 +240,7 @@ function countResolvedIndexFiles(resolvedIndexMap: ResolvedIndexMap): number {
   let count = 0
 
   for (const entry of resolvedIndexMap.values()) {
-    count += entry.files.size
+    for (const file of entry.files.values()) if (file.path) count++
   }
 
   return count

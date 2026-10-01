@@ -1,9 +1,13 @@
+import { join } from 'node:path'
 import type { Command } from 'commander'
+import { extractLocalUiAssets } from '../actions/asset-local'
 import {
   extractUiPatchIcons,
   resolveSavedUiIconState,
   syncUiAssetsToRemoteStorage,
 } from '../actions/asset-ui-icons'
+import { parseInputDefinitions } from '../utils/input'
+import { getWorkingDir } from '../utils/root'
 
 export function registerAssetCommand(program: Command) {
   const assetCmd = program
@@ -12,7 +16,10 @@ export function registerAssetCommand(program: Command) {
 
   assetCmd
     .command('ui-icons')
-    .description('Extract changed UI icon textures from base-game patches')
+    .alias('ui')
+    .description(
+      'Extract all icon textures and EXD-referenced maps from base-game patches',
+    )
     .option('-s, --server <name>', 'Target server name', 'sdo')
     .option(
       '--storage <name>',
@@ -28,8 +35,8 @@ export function registerAssetCommand(program: Command) {
     })
 
   assetCmd
-    .command('ui-icons-sync')
-    .description('Sync local UI icon assets and metadata to a remote storage')
+    .command('ui-sync')
+    .description('Sync local UI assets and metadata to a remote storage')
     .option('-s, --server <name>', 'Target server name', 'sdo')
     .requiredOption('--storage <name>', 'Remote storage name to sync to')
     .action(async (options) => {
@@ -38,7 +45,9 @@ export function registerAssetCommand(program: Command) {
 
   assetCmd
     .command('ui-icons-state')
-    .description('Resolve UI icon index data from saved patch state')
+    .description(
+      'Resolve all icons and EXD-referenced maps from saved patch state',
+    )
     .option('-s, --server <name>', 'Target server name', 'sdo')
     .option(
       '--storage <name>',
@@ -52,6 +61,46 @@ export function registerAssetCommand(program: Command) {
     .action(async (options) => {
       await resolveSavedUiIconState(options)
     })
+
+  assetCmd
+    .command('extract-local')
+    .description(
+      'Extract all icons and EXD-referenced maps into local storage, grouped by game version',
+    )
+    .argument('<game-path>', 'Game folder containing sqpack')
+    .option('-s, --server <name>', 'Target server name', 'sdo')
+    .option(
+      '--references <file>',
+      'Additional cumulative reference JSON to merge and update; storage references are always retained',
+    )
+    .option(
+      '--exd-schema <dir>',
+      'EXDSchema definitions (default: lib/EXDSchema)',
+    )
+    .option('--saintcoinach <dir>', 'SaintCoinach definitions')
+    .action(
+      async (
+        gamePath: string,
+        options: {
+          server: string
+          references?: string
+          exdSchema?: string
+          saintcoinach?: string
+        },
+      ) => {
+        await extractLocalUiAssets(
+          gamePath,
+          parseInputDefinitions(
+            options.saintcoinach,
+            options.exdSchema ??
+              (options.saintcoinach
+                ? undefined
+                : join(getWorkingDir(), 'lib/EXDSchema')),
+          ),
+          { server: options.server, references: options.references },
+        )
+      },
+    )
 
   return assetCmd
 }

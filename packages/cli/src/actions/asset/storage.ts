@@ -1,12 +1,20 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { AssetReferences } from '@ffcafe/ixion-exd'
 import type { AbstractStorage, LocalStorage } from '@ffcafe/ixion-storage'
 import { SingleBar } from 'cli-progress'
 import { baseGameVersion, uiSqPackFile } from '../../config'
 import { PatchFileSystem } from '../../utils/patch-fs'
 import { getStorageManager } from '../../utils/storage'
-import type { CurrentReference, EncodedAssetFormat, IconEntry } from './types'
+import { loadAssetReferences, saveAssetReferences } from './references'
+import type {
+  CurrentReference,
+  EncodedAssetFormat,
+  IconEntry,
+  MapEntry,
+  UiAssetEntry,
+} from './types'
 
 const { formatTex } = await import('@ffcafe/ixion-tex')
 
@@ -127,6 +135,53 @@ export class AssetStorage {
     return createAssetFileList(this.existingAssets)
   }
 
+  private referenceStorages() {
+    return this.remoteStorage
+      ? [this.localStorage, this.remoteStorage]
+      : [this.localStorage]
+  }
+
+  async loadReferences() {
+    const references = await loadAssetReferences(
+      this.server,
+      this.referenceStorages(),
+    )
+    return this.saveReferences(references)
+  }
+
+  async saveReferences(references: AssetReferences) {
+    return saveAssetReferences(
+      this.server,
+      this.referenceStorages(),
+      references,
+    )
+  }
+
+  async loadAssetState(version: string): Promise<Map<string, UiAssetEntry>> {
+    const state = new Map<string, UiAssetEntry>(
+      await this.loadIconState(version),
+    )
+    const maps = await this.readJson<MapEntry[]>(
+      `${pathSegment.patches}/${version}/maps.json`,
+    )
+    for (const entry of maps ?? []) state.set(entry.path, entry)
+    return state
+  }
+
+  async writeAssetState(version: string, state: Map<string, UiAssetEntry>) {
+    const entries = [...state.values()]
+    await this.writePatchJson(
+      version,
+      'icons.json',
+      entries.filter((entry) => 'id' in entry),
+    )
+    await this.writePatchJson(
+      version,
+      'maps.json',
+      entries.filter((entry) => 'territory' in entry),
+    )
+  }
+
   async loadIconState(version: string): Promise<Map<string, IconEntry>> {
     const remoteContent = await this.readRemoteJson<
       Array<Omit<IconEntry, 'path'>>
@@ -213,12 +268,11 @@ export class AssetStorage {
       throw new Error('Remote storage is required')
     }
 
+    await this.loadReferences()
+
     if (!existsSync(this.outputRoot)) {
       throw new Error(`Local UI output not found: ${this.outputRoot}`)
     }
-
-    const currentVersion = await this.loadLocalCurrentReference()
-    const manifestVersion = version ?? currentVersion.lastValidIndex
 
     const progressBar = new SingleBar({
       format: '{phase} [{bar}] {value}/{total}',
@@ -226,11 +280,21 @@ export class AssetStorage {
     })
 
     if (options.syncAssets) {
+      // Use the published remote manifest, not the local target version or an
+      // expensive listing of every remote image object.
+      const remoteCurrent = await this.readRemoteJson<CurrentReference>(
+        pathSegment.currentRef,
+      )
+      const remoteVersion =
+        remoteCurrent?.lastValidIndex ||
+        remoteCurrent?.ffxiv ||
+        version ||
+        (await this.loadLocalCurrentReference()).lastValidIndex
       const remoteAssets = await this.loadRemoteExistingAssets(
-        currentVersion.lastValidIndex,
+        remoteVersion,
+        false,
       )
       const localAssets = await this.scanLocalExistingAssets()
-      const localAssetFileList = createAssetFileList(localAssets)
 
       const assetUploads = [...localAssets].filter(
         ([sha256, format]) => remoteAssets.get(sha256) !== format,
@@ -273,14 +337,7 @@ export class AssetStorage {
         console.log(`No asset files need uploading.`)
       }
 
-      await this.writeRemoteJson(
-        `${pathSegment.patches}/${manifestVersion}/${assetFileListPath}`,
-        localAssetFileList,
-      )
-
-      console.log(
-        `Synced ${uploadedAssets} asset file(s) and written assets list.`,
-      )
+      console.log(`Synced ${uploadedAssets} asset file(s).`)
     }
 
     const patchFiles = version
@@ -289,7 +346,7 @@ export class AssetStorage {
     const changedPatchFiles = await this.collectChangedPatchFiles(patchFiles)
 
     console.log(
-      `Patch metadata files queued: ${patchFiles.length}. Manifest version: ${manifestVersion}.`,
+      `Patch metadata files queued: ${patchFiles.length}${version ? ` for ${version}` : ' across all local snapshots'}.`,
     )
     console.log(
       `Patch metadata diff check complete: ${changedPatchFiles.length}/${patchFiles.length} file(s) changed.`,
@@ -324,18 +381,21 @@ export class AssetStorage {
       progressBar.stop()
     }
 
-    console.log(`Uploading manifest files...`)
-    const currentContent = await readFile(this.currentRefPath)
-    await remoteStorage.writeFile(
-      this.server,
-      uiStoragePathKey,
-      pathSegment.currentRef,
-      currentContent,
-      'application/json',
-    )
+    // Publish the local snapshot reference only after images and metadata.
+    if (existsSync(this.currentRefPath)) {
+      console.log(`Uploading current.json...`)
+      const currentContent = await readFile(this.currentRefPath)
+      await remoteStorage.writeFile(
+        this.server,
+        uiStoragePathKey,
+        pathSegment.currentRef,
+        currentContent,
+        'application/json',
+      )
+    }
 
     console.log(
-      `Synced ${syncedPatchFiles} patch metadata file(s), and current.json to storage '${this.getRemoteStorageName()}'${version ? ` for ${version}` : ''}.`,
+      `Synced ${syncedPatchFiles} patch metadata file(s) to storage '${this.getRemoteStorageName()}'${version ? ` for ${version}` : ''}.`,
     )
   }
 
@@ -446,6 +506,7 @@ export class AssetStorage {
 
   private async loadRemoteExistingAssets(
     version: string,
+    allowListing = true,
   ): Promise<Map<string, EncodedAssetFormat>> {
     const remoteAssets = new Map<string, EncodedAssetFormat>()
     if (!this.remoteStorage) {
@@ -466,7 +527,22 @@ export class AssetStorage {
       return remoteAssets
     }
 
+    if (!allowListing) {
+      console.log(
+        `No remote asset-files.json for ${version}; all local images will be uploaded without listing remote objects.`,
+      )
+      return remoteAssets
+    }
+
     console.log('Fallback to listing remote files')
+    return this.listRemoteExistingAssets()
+  }
+
+  private async listRemoteExistingAssets(): Promise<
+    Map<string, EncodedAssetFormat>
+  > {
+    const remoteAssets = new Map<string, EncodedAssetFormat>()
+    if (!this.remoteStorage) return remoteAssets
     const remoteFiles = await this.remoteStorage.listFiles(
       this.server,
       uiStoragePathKey,
@@ -591,7 +667,8 @@ function createIconStateMap(entries: Array<Omit<IconEntry, 'path'>>) {
 
 function toIconPath(id: number, version: string, hr: boolean) {
   const paddedId = id.toString().padStart(6, '0')
-  return `ui/icon/${paddedId.slice(0, 3)}000${version}/${paddedId}${hr ? '_hr1' : ''}.tex`
+  const group = (Math.floor(id / 1000) * 1000).toString().padStart(6, '0')
+  return `ui/icon/${group}${version}/${paddedId}${hr ? '_hr1' : ''}.tex`
 }
 
 async function processWithConcurrency<T>(

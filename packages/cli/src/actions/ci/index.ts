@@ -30,7 +30,7 @@ export const ciUpdateCommand = async ({
     if (skipUpdate) {
       console.log('\nSkipping asset processing...')
     } else {
-      await processAssets()
+      await processAssets(currentVersions)
     }
 
     // Step 4: Check if versions changed and create releases

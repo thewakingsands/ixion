@@ -150,6 +150,8 @@ async function createAllRawExdArchive({
     const definitions = parseInputDefinitions()
     const { filter } = createExdFilter(undefined, true)
     await exportAllRawExd({
+      // CI asset references are collected from CN before the asset stage.
+      collectReferences: false,
       definitions,
       crlf: false,
       serverVersions,

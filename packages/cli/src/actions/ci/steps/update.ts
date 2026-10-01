@@ -1,6 +1,6 @@
 import type { StorageManager } from '@ffcafe/ixion-storage'
 import { type UpdateOptions, updateCommand } from '../../update'
-import { serversToCheck } from '../constants'
+import { mergedVersionReference, serversToCheck } from '../constants'
 
 export async function checkAndUpdateVersions(
   storageManager: StorageManager,
@@ -35,6 +35,7 @@ export async function checkAndUpdateVersions(
     for (const serverName of serversToCheck) {
       const updateResult = await updateCommand({
         server: serverName,
+        collectReferences: serverName === mergedVersionReference,
       } as UpdateOptions)
 
       currentVersions[serverName] = updateResult.afterVersion

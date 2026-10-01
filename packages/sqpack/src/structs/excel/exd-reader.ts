@@ -34,16 +34,20 @@ export class EXDReader {
     return this.variant === ExcelVariant.Subrows
   }
 
-  readRow(rowId: number): any[] {
+  readRow(rowId: number, columnIndexes?: readonly number[]): any[] {
     const { offset, rowCount } = this.readRowHeader(rowId)
     if (rowCount !== 1) {
       throw new Error(`Row ${rowId} has ${rowCount} rows, expected 1`)
     }
 
-    return this.readColumns(offset)
+    return this.readColumns(offset, columnIndexes)
   }
 
-  readSubrow(rowId: number, subRowIndex: number): IExdDataSubRow {
+  readSubrow(
+    rowId: number,
+    subRowIndex: number,
+    columnIndexes?: readonly number[],
+  ): IExdDataSubRow {
     const { offset, rowCount } = this.readRowHeader(rowId)
     if (subRowIndex >= rowCount) {
       throw new Error(
@@ -55,7 +59,7 @@ export class EXDReader {
       offset + subRowIndex * (this.rowDataSize + subRowIdSize)
     return {
       subRowId: this.readSubRowId(subRowOffset),
-      data: this.readColumns(subRowOffset + subRowIdSize),
+      data: this.readColumns(subRowOffset + subRowIdSize, columnIndexes),
     }
   }
 
@@ -105,7 +109,20 @@ export class EXDReader {
     return this.buffer.readUInt16BE()
   }
 
-  private readColumns(rowOffset: number): any[] {
+  /** Selected columns keep their original indexes in a sparse row array. */
+  private readColumns(
+    rowOffset: number,
+    columnIndexes?: readonly number[],
+  ): any[] {
+    if (columnIndexes) {
+      const values: any[] = []
+      for (const index of columnIndexes) {
+        const column = this.columns[index]
+        if (!column) throw new Error(`Column index out of range: ${index}`)
+        values[index] = this.readColumn(rowOffset, column)
+      }
+      return values
+    }
     return this.columns.map((column) => this.readColumn(rowOffset, column))
   }
 

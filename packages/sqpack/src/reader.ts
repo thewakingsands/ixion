@@ -72,7 +72,7 @@ interface ReadChunkOptions extends ChunkExpections {
 }
 
 export class SqPackReader {
-  private dataHandles: Map<number, SqPackFileReader> = new Map()
+  private dataHandles = new Map<number, Promise<SqPackFileReader>>()
   private indexEntries: Map<number | bigint, IndexHashData>
   private options: SqPackReaderOptions
   private openHandler: SqPackFileOpenHandler
@@ -147,17 +147,21 @@ export class SqPackReader {
       fileIndex.offset,
     )
 
-    let handle = this.dataHandles.get(fileIndex.dataFileId)
-    if (!handle) {
+    let pendingHandle = this.dataHandles.get(fileIndex.dataFileId)
+    if (!pendingHandle) {
       const dataPath = `${this.options.prefix}.dat${fileIndex.dataFileId}`
-      handle = await this.openHandler(dataPath)
-      this.dataHandles.set(fileIndex.dataFileId, handle)
+      pendingHandle = this.openHandler(dataPath)
+      this.dataHandles.set(fileIndex.dataFileId, pendingHandle)
     }
+    const handle = await pendingHandle
 
     const [fileInfo, fileInfoBuffer] = await this.readFileInfo(
       handle,
       fileIndex.offset,
     )
+    // Empty entries are placeholders/tombstones retained in the index, not
+    // readable files. Do not treat zero-length Standard/Texture data the same way.
+    if (fileInfo.type === FileType.Empty) return null
     if (fileInfo.rawFileSize === 0) {
       throw new Error(`File ${filePath} is empty`)
     }
@@ -363,12 +367,17 @@ export class SqPackReader {
    * Close all file handles
    */
   async close(): Promise<void> {
-    for (const handle of this.dataHandles.values()) {
-      await handle.close()
+    try {
+      const handles = await Promise.allSettled(this.dataHandles.values())
+      await Promise.all(
+        handles.map((handle) =>
+          handle.status === 'fulfilled' ? handle.value.close() : undefined,
+        ),
+      )
+    } finally {
+      this.dataHandles.clear()
+      this.indexEntries.clear()
     }
-
-    this.dataHandles.clear()
-    this.indexEntries.clear()
   }
 
   async #read(handle: SqPackFileReader, offset: number, length = blockSize) {
