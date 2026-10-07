@@ -1,3 +1,9 @@
+import { createHash } from 'node:crypto'
+
+export type PublicationPolicy =
+  | { mode: 'conditional' }
+  | { mode: 'cooperative' }
+
 export interface VersionData {
   ffxiv: string
   ex1?: string
@@ -19,6 +25,52 @@ export interface StorageConfig {
 }
 
 export abstract class AbstractStorage {
+  /** Explicit policy, never inferred from a storage's display name. */
+  getPublicationPolicy(): PublicationPolicy {
+    const { publicationMode } = this.config.config
+    if (publicationMode === undefined || publicationMode === 'conditional')
+      return { mode: 'conditional' }
+    if (publicationMode !== 'cooperative')
+      throw new Error('Invalid asset publicationMode')
+    return { mode: 'cooperative' }
+  }
+
+  /** Stable physical destination identity, independent of credentials and aliases. */
+  getPublicationKey(server: string): string {
+    return createHash('sha256')
+      .update(this.getRootPath('ui', server))
+      .digest('hex')
+  }
+
+  /** Asset publication must distinguish absence from transport/auth failures. */
+  async readFileStrict(
+    _server: string,
+    _pathKey: string,
+    _relativePath: string,
+  ): Promise<Buffer | null> {
+    throw new Error('Strict asset reads are not supported by this storage')
+  }
+
+  /** Atomic create-if-absent. Never emulate this with HEAD followed by PUT. */
+  async createFile(
+    _server: string,
+    _pathKey: string,
+    _relativePath: string,
+    _content: Buffer,
+    _contentType?: string,
+  ): Promise<boolean> {
+    throw new Error(
+      'Conditional asset writes are not supported by this storage',
+    )
+  }
+
+  async deleteFile(
+    _server: string,
+    _pathKey: string,
+    _relativePath: string,
+  ): Promise<void> {
+    throw new Error('Asset publication locks are not supported by this storage')
+  }
   protected config: StorageConfig
 
   constructor(config: StorageConfig) {

@@ -66,11 +66,6 @@ export async function extractLocalUiAssets(
       paths: generateLocalAssetPaths(gamePath, mergedReferences),
     })
     await storage.writeAssetState(version, state)
-    await storage.writePatchJson(
-      version,
-      'asset-files.json',
-      storage.getAssetFileList(),
-    )
     await storage.writeCurrentReference({
       ffxiv: version,
       lastValidIndex: version,
@@ -80,5 +75,6 @@ export async function extractLocalUiAssets(
     )
   } finally {
     await reader.close()
+    storage.close()
   }
 }

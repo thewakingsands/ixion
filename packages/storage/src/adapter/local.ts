@@ -23,6 +23,47 @@ export interface LocalStorageConfig {
 }
 
 export class LocalStorage extends AbstractStorage {
+  async readFileStrict(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null> {
+    try {
+      return readFileSync(
+        this.getStorageFilePath(server, pathKey, relativePath),
+      )
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw e
+    }
+  }
+
+  async createFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer,
+  ): Promise<boolean> {
+    const path = this.getStorageFilePath(server, pathKey, relativePath)
+    mkdirSync(dirname(path), { recursive: true })
+    try {
+      writeFileSync(path, content, { flag: 'wx' })
+      return true
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false
+      throw e
+    }
+  }
+
+  async deleteFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<void> {
+    rmSync(this.getStorageFilePath(server, pathKey, relativePath), {
+      force: true,
+    })
+  }
   private rootPath: string
   private paths?: StoragePathMap
   private versionsRootPath: string

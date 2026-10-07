@@ -70,7 +70,7 @@ references can only be retained once those EXD files have been processed.
 
 ```bash
 # Incremental UI patches: exhaustive icons and referenced maps (ui-icons remains an alias)
-pnpm run x asset ui --server sdo --storage minio
+pnpm run x asset ui --server sdo --storage garage-33
 
 # Full extraction into the local storage configured in .ixion-config.json
 pnpm run x asset extract-local "D:/Games/FFXIV/game" --server sdo --exd-schema lib/EXDSchema
@@ -78,107 +78,202 @@ pnpm run x asset extract-local "D:/Games/FFXIV/game" --server sdo --exd-schema l
 # Reuse a cumulative list from another extraction/storage
 pnpm run x asset extract-local "D:/Games/FFXIV/game" --references "references.json"
 
-# Upload missing images, then synchronize version manifests and references
-pnpm run x asset ui-sync --server sdo --storage minio
+# Upload immutable chunks, then publish the catalog, runtime index and current pointer
+pnpm run x asset ui-sync --server sdo --storage garage-33
 ```
 
-Full extraction requires a configured local storage and a valid `ffxivgame.ver`
-in the game folder. The old `<output>` argument is no longer accepted. Output
-uses `<local.rootPath>/<local.paths.ui or ui>/<server>/` (`server` defaults to
-`sdo`), with the same layout as incremental extraction:
+Full extraction requires Node 24 or newer, a configured local storage and a valid
+`ffxivgame.ver`. It writes beneath
+`<local.rootPath>/<local.paths.ui or ui>/<server>/` (default server: `sdo`):
 
 ```text
 storage/ui/sdo/
-  current.json
+  catalog.sqlite                         # transactional build state, not a runtime index
+  current.json                           # ffxiv, lastValidIndex, publication UUID
   references.json
-  assets/<hash-prefix>/<sha256>.webp (or .avif)
-  patches/<ffxivgame.ver>/icons.json
-  patches/<ffxivgame.ver>/maps.json
-  patches/<ffxivgame.ver>/assets.bin
-  patches/<ffxivgame.ver>/asset-files.json
+  chunks/<uuid>.bin                      # immutable concatenated encoded images
+  patches/<version>/catalog.sqlite       # consistent publication snapshot
+  patches/<version>/assets.bin            # IXAS v2 runtime index
 ```
 
-References from storage, the installation and optional `--references` input are
-merged cumulatively. The optional reference file is also updated. Existing
-encoded files in storage are reused on subsequent runs. Old `outputs/ui` files
-are not moved automatically. After images and all version metadata are written
-successfully, extraction sets both `ffxiv` and `lastValidIndex` in local
-`current.json` to `ffxivgame.ver`. Failures before that point leave the previous
-reference unchanged. Extraction never uploads to remote storage or changes the
-`.diff` patch replay state; the full snapshot alone is not a patch replay baseline.
+Only new or changed encoded images create chunks. A batch targets 32 MiB per
+chunk and seals its final partial chunk; later batches never reopen it. Images
+are never split or compressed again. Images larger than 32 MiB get a dedicated
+chunk, up to the 64 MiB image limit. Deduplication uses the original TEX SHA-256,
+stored as a 32-byte SQLite BLOB, not a checksum of the encoded WebP/AVIF bytes.
+Old bytes are never overwritten or compacted. Deletions change path mappings
+only. The runtime index contains no image SHA-256.
 
-The manual `ui-sync` command uploads missing images before version metadata;
-use the configured remote storage name for `--storage` (for example,
-`minio-backup` in the example config). It works without a local `current.json`,
-leaving the remote checkpoint untouched in that case. Existing local checkpoints
-are synchronized as before. CI's internal metadata synchronization does not
-perform the additional full image scan.
+SQLite replaces `icons.json`, `maps.json` and `asset-files.json`. Tables hold
+objects, paths, sealed chunks and build/publication metadata. Chunk data is
+fsynced before its records are committed; publication databases are exported
+with `VACUUM INTO`, not copied with an uncheckpointed WAL. Diagnostic
+`changes.json`/`resolved-index.json` and cumulative EXD `references.json`
+remain separate. Do not edit SQLite tables or copy a database while it is open.
 
-Manual sync compares local images with `asset-files.json` at the remote
-`current.json` version (`lastValidIndex`, falling back to `ffxiv`). It never lists
-remote image objects. If there is no remote current reference, it uses the local
-target version; if the manifest is absent, it uploads all local images. This
-trusts the manifest and does not detect missing objects already listed there.
+Extraction advances local `current.json` only after the snapshot is complete.
+It does not upload resources or change the `.diff` patch replay state; a full
+game snapshot is not by itself a patch replay baseline.
 
-### Unified binary asset index
+### Migration and publication
 
-Both local extraction and incremental extraction write `assets.bin` alongside
-`icons.json` and `maps.json`. The binary file combines icons and map source
-textures into one path-hash lookup table; the JSON files remain the lossless
-working state for incremental extraction and compatibility with older readers.
-`asset-files.json` remains a separate cumulative image inventory. Existing
-snapshots are not converted automatically by `ui-sync`; regenerating a snapshot
-with extraction also generates its binary index. Sync uploads the binary as
-`application/octet-stream`, after images and before `current.json`.
+The new runtime accepts **IXAS v2 only**. There is no fallback to old binary/JSON
+indexes or per-image objects. Prepare a separate storage prefix and switch it
+together with the new service.
 
-The IXAS v1 wire format uses little-endian integers and a 64-byte header:
+```bash
+# Read only the legacy current version, pack without re-encoding and verify every path.
+# The destination is an EMPTY UI server root, separate from the configured legacy root.
+pnpm x asset ui-pack --server sdo --output ../ixion-chunks/ui/sdo
 
-| Offset | Type | Value |
+# Then configure local.rootPath to ../ixion-chunks and select a NEW remote prefix.
+pnpm x asset ui-sync --server sdo --storage garage-33
+
+# Resume the exact saved publication only after its previous writer has stopped.
+pnpm x asset ui-sync --server sdo --storage garage-33 --resume
+```
+
+The importer leaves the source untouched. It migrates the current valid version,
+not old historical versions; historical versions will not be accessible in the
+new store unless separately rebuilt. It does not delete old MinIO objects.
+
+`ui-sync` requires a completed local current snapshot. It compares the remote
+published SQLite catalog (from `catalogs/<publication>.sqlite`), never a bucket
+listing. It trusts the published inventory rather than auditing existing objects.
+Uploads occur in this order: new immutable chunks, immutable SQLite snapshot,
+`patches/<version>/assets.bin`, and finally `current.json`. A fresh CI workspace
+downloads the current catalog to retain deduplication and location information;
+already-published chunk contents do not have to be downloaded for building.
+
+Only one writer may use a local workspace or publish to a server at a time.
+A local `.asset-build.lock` prevents overlapping builds. After a crash, stop
+the previous process before removing this exact local lock file. A remote
+`publish.lock` and a SQLite pending-publication record preserve interrupted
+publication state. Failures require `--resume`; do not modify local snapshot
+files or launch a competing recovery process. Stale remote baselines are
+rejected rather than overwritten. A stale workspace must be rebuilt from a
+fresh copy of the latest published catalog, not forced over the remote state.
+
+The shared `S3Storage` adapter supports `type: "s3"`; `type: "minio"` and the
+`MinioStorage` class remain aliases, not separate implementations. Endpoint,
+bucket, region and credentials are ordinary S3 settings (the region must match
+the server configuration). Publication policy is explicit, never inferred from
+a storage name such as `garage-33`.
+
+The default `publicationMode: "conditional"` requires S3 `If-None-Match: *`
+for PUT. A unique temporary probe verifies enforcement and is then deleted.
+Unsupported endpoints fail closed; no automatic unsafe fallback is used.
+
+Garage does not support atomic conditional writes. Configure its S3 storage
+with explicit `publicationMode: "cooperative"`. This opts into a **best-effort
+remote cooperative lock**, not strict distributed mutual exclusion. No hostname
+binding, shared directory or additional coordination service is required.
+Different devices and CI jobs use the same `ui/<server>/publish.lock` object;
+in normal operation they must not publish simultaneously.
+
+The lock records a random per-run owner UUID, publication UUID and acquisition
+time. Acquisition checks for an existing lock, writes the record with ordinary
+PUT and reads it back. Existing locks are rejected regardless of age. Chunk and
+metadata writes check ownership before and after each operation; baseline checks
+also run before publishing the index and current pointer. Detected ownership
+loss stops publication without deleting the observed other owner's lock.
+Successful publication removes its lock. Errors preserve the lock and the local
+pending plan for explicit recovery; clocks do not control lock expiry.
+
+These checks cannot close the GET-to-PUT or GET-to-DELETE race windows. Two
+simultaneous acquirers can both initially succeed, an in-flight write cannot be
+undone after ownership loss, and a concurrent takeover can race with unlock.
+There is no fencing token enforced by Garage. Content checks and baseline checks
+reduce accidental conflicts, but do not guarantee safety under concurrent
+publication. `createFile` remains unavailable in cooperative mode rather than
+pretending a read-then-write is atomic. Strict acquisition is still available
+only through conditional mode on a backend that supports it.
+
+Inspect and recover a publication only after stopping all previous writers:
+
+```sh
+# Read-only: displays owner, publication and acquiredAt, or null if unlocked.
+pnpm x asset ui-lock --server sdo --storage garage-33
+
+# Continue the saved publication plan; rotates the owner UUID.
+pnpm x asset ui-sync --server sdo --storage garage-33 --resume
+
+# Abandon a lock only after stopping its writer; use the exact owner from ui-lock.
+pnpm x asset ui-unlock --server sdo --storage garage-33 --owner <owner-uuid> --confirm-stopped
+```
+
+`--resume` can reclaim only the same publication UUID, never a different
+publication's lock. To resume on another device, transfer the complete local
+workspace including its catalog, pending plan, snapshot and new chunk files
+after stopping the original process. Remove a crash-left `.asset-build.lock`
+only after confirming its process is stopped. Manual `ui-unlock` checks the
+owner and rereads the lock before deleting it; it does not delete local pending
+state, chunks, snapshots or current. No publisher may start during manual
+unlock. After abandoning an outdated plan, rebuild in a fresh workspace from
+the latest remote catalog rather than forcing a stale baseline over it.
+
+Already-published chunks are compared by UUID, length and digest in the remote
+SQLite catalog only: no chunk GET, HEAD, checksum calculation or upload is
+performed. Only unconfirmed objects (typically an interrupted upload whose
+catalog was not published) are downloaded and compared byte-for-byte before
+reuse. Differing content is rejected, never overwritten. SDK errors are not
+interpreted as absence. The immutable UUID chunk layout and IXAS v2 format are
+unchanged; runtime readers need no Garage-specific adapter.
+Unreferenced failed-upload chunks are retained; garbage collection is not part
+of this release.
+
+Publisher credentials need GET and PUT beneath the UI prefix, plus DELETE for
+`publish.lock` and, in conditional mode, temporary `.capabilities/` probes. They do not need
+bucket listing. Service runtime credentials only need GET (including Range).
+
+### IXAS v2 wire format
+
+All integers are little-endian. Layout: 64-byte header, 24-byte chunk entries,
+then 20-byte resource entries.
+
+| Header offset | Type | Value |
 | --- | --- | --- |
-| 0 | 4 bytes | ASCII `IXAS` |
-| 4 | uint16 | Format version: `1` |
-| 6 | uint16 | Header size: `64` |
-| 8 | uint32 | Flags: `0` |
-| 12 | uint16 | Record size: `44` |
-| 14 | uint16 | Hash kind: `1` (SqPack `.index` dual CRC32) |
-| 16 | uint32 | Record count |
-| 20 | uint32 | Record section offset: `64` |
-| 24 | uint32 | Total file size: `64 + count * 44` |
-| 28 | uint32 | Standard CRC-32/IEEE checksum of bytes `[64, EOF)` |
-| 32 | 32 bytes | Reserved: all zero |
+| 0 | bytes[4] | ASCII `IXAS` |
+| 4 | uint16 | Version `2` |
+| 6 | uint16 | Header size `64` |
+| 8 | uint32 | Flags `0` |
+| 12 | uint16 | Resource entry size `20` |
+| 14 | uint16 | Hash kind `1`: SqPack dual CRC32 |
+| 16 | uint32 | Resource count |
+| 20 | uint32 | Resource table offset: `64 + chunk_count * 24` |
+| 24 | uint32 | Total file length |
+| 28 | uint32 | Standard CRC-32/IEEE over bytes `[64, EOF)` |
+| 32 | uint32 | Chunk count, at most 65,536 |
+| 36 | uint32 | Chunk table offset `64` |
+| 40 | uint16 | Chunk entry size `24` |
+| 42 | bytes[22] | Reserved, zero |
 
-Each 44-byte record contains:
+A chunk entry contains UUID bytes [0,16), uint32 actual length at 16 and four
+reserved zero bytes at 20. UUID bytes use canonical textual UUID byte order.
+Only chunks referenced by this snapshot appear, strictly sorted by UUID bytes.
+Objects are addressed as `chunks/<canonical-lowercase-hyphenated-uuid>.bin`.
 
-| Offset | Type | Value |
+| Resource offset | Type | Value |
 | --- | --- | --- |
-| 0 | uint32 | Filename SqPack CRC32 |
-| 4 | uint32 | Directory SqPack CRC32, excluding the final `/` |
-| 8 | 32 bytes | Existing asset SHA-256, raw bytes (not recomputed) |
-| 40 | uint8 | Format: `1=webp`, `2=avif`, `3=tex` |
-| 41 | 3 bytes | Reserved: all zero |
+| 0 | uint64 | `directoryCRC << 32 \| filenameCRC` |
+| 8 | uint32 | Offset within the chunk |
+| 12 | uint32 | Image byte length, nonzero |
+| 16 | uint16 | Snapshot-local chunk table index, 0..65535 |
+| 18 | uint8 | Format: 1 WebP, 2 AVIF, 3 TEX |
+| 19 | uint8 | Reserved, zero |
 
-Paths are lowercased and use `/`. v1 accepts ASCII letters, digits, `_`, `-`,
-`.` and `/`, with fewer than 260 characters, at least one directory, and no
-empty, `.` or `..` segments. Backslashes and whitespace are rejected. Hashes
-are computed by `calculateIndexHash`: the 64-bit key is
-`directoryCRC << 32 | filenameCRC`. Records are strictly sorted by this unsigned
-key. The encoder rejects duplicate normalized paths and hash collisions before
-writing snapshot metadata, including collisions pointing to the same image.
+Paths use lowercase ASCII letters, digits, `_`, `-`, `.` and `/`, are shorter
+than 260 characters, and have no empty, dot or parent segments. Backslashes
+are rejected. Resource entries are strictly sorted by their unsigned hash.
+Path CRC32 is the complement of standard CRC32; the payload checksum is not.
+Duplicate keys/collisions, unsupported headers, nonzero reserved bytes,
+unreferenced/duplicate chunks, zero sizes and out-of-bounds ranges are rejected.
+Readers use wide arithmetic for bounds checks.
 
-SqPack path CRC32 is the complement of the standard CRC-32/IEEE result:
-`"123456789"` hashes to `0x340bc6d9`; the standard checksum is `0xcbf43926`.
-Do not apply the path-hash convention to the payload checksum. The empty payload
-checksum is zero. Readers must reject unsupported versions, flags, hash kinds,
-format codes, nonzero reserved bytes, invalid lengths/checksums and unsorted or
-duplicate keys. Use wide arithmetic for size validation.
-
-`BinaryAssetIndex` validates and owns the binary buffer and performs binary
-search by game path without creating per-record objects. SHA-256 and format
-still resolve to `assets/<first-two-hex-digits>/<sha256>.<format>`. CRCs are not
-collision-proof membership checks and cannot recover paths; this file does not
-provide path enumeration or replace JSON working state. Map composition is
-unchanged: look up `_m.tex` and `m_m.tex` separately. No territory dictionary or
-icon/map discriminator is stored.
+The 16-bit field is NOT a global identifier: the same chunk can have different
+table positions in different snapshots. Disk caches must key by physical UUID,
+offset, size, format and storage namespace. Exceeding 65,536 referenced chunks
+fails publication; no truncation, wraparound or automatic repacking is allowed.
 
 Both extraction modes use the same icon enumeration rules, map reference
 generator and texture processor. Collected icon IDs remain in references.json

@@ -1,5 +1,6 @@
 export type {
   AbstractStorage,
+  PublicationPolicy,
   StorageConfig,
   StoragePathMap,
   VersionData,

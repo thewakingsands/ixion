@@ -62,3 +62,13 @@ Stores version files on the local filesystem with direct file access.
 Uses a shared S3 implementation for Garage, MinIO and other compatible services.
 Use `type: 's3'`; `type: 'minio'` remains an alias. Version directories are
 automatically compressed into ZIP files for transfer.
+
+Asset publication defaults to `publicationMode: 'conditional'` and verifies
+atomic create support. Garage instead requires explicit
+`publicationMode: 'cooperative'`, which opts into a best-effort remote lock
+without hostname binding or shared local directories. The asset workflow checks
+remote ownership around writes, but GET/PUT/DELETE are not atomic and simultaneous
+publication is not strictly safe. Direct `createFile` calls remain rejected.
+Locks never expire automatically; use `asset ui-lock`, `asset ui-sync --resume`
+or explicit `asset ui-unlock --owner <uuid> --confirm-stopped` for recovery after
+stopping old writers. See the root README for deployment and recovery rules.

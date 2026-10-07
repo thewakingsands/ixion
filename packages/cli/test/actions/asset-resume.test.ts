@@ -13,7 +13,9 @@ vi.mock('../../src/actions/asset/storage', () => ({ AssetStorage: class {
   loadReferences = async () => mocks.references
   loadExistingAssets = async () => new Map()
   loadAssetState = async () => mocks.state
-  getAssetFileList = () => []
+  close = vi.fn()
+  hasRemoteStorage = () => false
+  writeCurrentReference = vi.fn()
   writeAssetState = mocks.writeAssetState
   writePatchJson = mocks.writePatchJson
 } }))
@@ -27,7 +29,7 @@ it('processes newly collected references even when no UI patches are available',
   expect(mocks.loadState).toHaveBeenCalledOnce()
   expect(mocks.processTextures).toHaveBeenCalledWith(expect.objectContaining({ iconState: mocks.state, uiIndex: mocks.index }))
   expect(mocks.writeAssetState).toHaveBeenCalledWith('current', mocks.state)
-  expect(mocks.writePatchJson).toHaveBeenCalledWith('current', 'asset-files.json', [])
+  expect(mocks.writePatchJson).toHaveBeenCalledWith('current', 'changes.json', expect.any(Object))
 })
 
 it('can scan icons when no EXD asset references have been collected', async () => {

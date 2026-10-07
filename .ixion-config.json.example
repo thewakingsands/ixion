@@ -15,6 +15,7 @@
       "name": "garage-33",
       "type": "s3",
       "config": {
+        "publicationMode": "cooperative",
         "endPoint": "localhost",
         "port": 3900,
         "useSSL": false,

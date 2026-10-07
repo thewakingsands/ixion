@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import {
   compressDirectoryToBuffer,
@@ -22,9 +23,139 @@ export interface S3StorageConfig {
   region?: string
   prefix?: string
   paths?: StoragePathMap
+  publicationMode?: 'conditional' | 'cooperative'
 }
 
 export class S3Storage extends AbstractStorage {
+  private conditionalSupport?: Promise<void>
+
+  override getPublicationKey(server: string): string {
+    const c = this.config.config as S3StorageConfig
+    const tls = c.useSSL ?? true
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          tls,
+          c.endPoint.toLowerCase(),
+          c.port ?? (tls ? 443 : 80),
+          c.bucketName,
+          this.getRootPath('ui', server),
+        ]),
+      )
+      .digest('hex')
+  }
+
+  private async checkConditionalSupport(server: string, pathKey: string) {
+    const probe = `.capabilities/${randomUUID()}`
+    const original = Buffer.from(randomUUID())
+    if (!(await this.conditionalCreate(server, pathKey, probe, original))) {
+      throw new Error('Conditional-write probe UUID collision')
+    }
+    try {
+      const overwritten = await this.conditionalCreate(
+        server,
+        pathKey,
+        probe,
+        Buffer.from('must-not-overwrite'),
+      )
+      const actual = await this.readFileStrict(server, pathKey, probe)
+      if (overwritten || !actual?.equals(original)) {
+        throw new Error(
+          'Storage does not enforce If-None-Match conditional creation; chunk publication is disabled',
+        )
+      }
+    } finally {
+      await this.deleteFile(server, pathKey, probe)
+    }
+  }
+  private assetKey(server: string, pathKey: string, relativePath: string) {
+    return [
+      this.getPathPrefix(server, pathKey),
+      trimStorageSegment(relativePath),
+    ]
+      .filter(Boolean)
+      .join('/')
+  }
+
+  async readFileStrict(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<Buffer | null> {
+    try {
+      return await streamToBuffer(
+        await this.client.getObject(
+          this.bucketName,
+          this.assetKey(server, pathKey, relativePath),
+        ),
+      )
+    } catch (e) {
+      if (
+        ['NoSuchKey', 'NotFound'].includes((e as { code?: string }).code ?? '')
+      )
+        return null
+      throw e
+    }
+  }
+
+  async createFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer,
+    contentType = 'application/octet-stream',
+  ): Promise<boolean> {
+    if (this.getPublicationPolicy().mode === 'cooperative')
+      throw new Error(
+        'Atomic create is unavailable in cooperative mode; use the guarded publication workflow',
+      )
+    this.conditionalSupport ??= this.checkConditionalSupport(server, pathKey)
+    await this.conditionalSupport
+    return this.conditionalCreate(
+      server,
+      pathKey,
+      relativePath,
+      content,
+      contentType,
+    )
+  }
+
+  private async conditionalCreate(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    content: Buffer,
+    contentType = 'application/octet-stream',
+  ): Promise<boolean> {
+    try {
+      // Single PUT: conditional headers must not disappear in multipart completion.
+      await this.client.makeRequestAsyncOmit(
+        {
+          method: 'PUT',
+          bucketName: this.bucketName,
+          objectName: this.assetKey(server, pathKey, relativePath),
+          headers: { 'If-None-Match': '*', 'Content-Type': contentType },
+        },
+        content,
+        [200],
+      )
+      return true
+    } catch (e) {
+      if ((e as { code?: string }).code === 'PreconditionFailed') return false
+      throw e
+    }
+  }
+
+  async deleteFile(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+  ): Promise<void> {
+    await this.client.removeObject(
+      this.bucketName,
+      this.assetKey(server, pathKey, relativePath),
+    )
+  }
   private client: Client
   private bucketName: string
   private prefix: string

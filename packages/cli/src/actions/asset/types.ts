@@ -22,6 +22,7 @@ export interface MapEntry {
 export type UiAssetEntry = IconEntry | MapEntry
 
 export interface CurrentReference {
+  publication?: string
   ffxiv?: string
   lastValidIndex?: string
 }

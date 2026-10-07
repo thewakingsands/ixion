@@ -1,41 +1,61 @@
-import { existsSync, mkdirSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AssetReferences } from '@ffcafe/ixion-exd'
-import type { AbstractStorage, LocalStorage } from '@ffcafe/ixion-storage'
-import { SingleBar } from 'cli-progress'
+import type {
+  AbstractStorage,
+  LocalStorage,
+  PublicationPolicy,
+} from '@ffcafe/ixion-storage'
 import { baseGameVersion, uiSqPackFile } from '../../config'
 import { PatchFileSystem } from '../../utils/patch-fs'
 import { getStorageManager } from '../../utils/storage'
-import { assetIndexFileName, encodeAssetIndex } from './binary-index'
+import { BinaryAssetIndex } from './binary-index'
+import { AssetCatalog, atomicWrite, catalogFileName, digest } from './catalog'
+import { createAssetStateEntry } from './patch'
+import { PublicationLock, writePublicationObject } from './publication'
 import { loadAssetReferences, saveAssetReferences } from './references'
 import type {
   CurrentReference,
   EncodedAssetFormat,
-  IconEntry,
-  MapEntry,
   UiAssetEntry,
 } from './types'
 
 const { formatTex } = await import('@ffcafe/ixion-tex')
 
-const allowList = [`${uiSqPackFile}.*`]
-const uiStoragePathKey = 'ui'
-const assetFileListPath = 'asset-files.json'
-const syncAssetsConcurrency = 128
-const syncPatchConcurrency = 4
-const pathSegment = {
-  patches: 'patches',
-  assets: 'assets',
-  diff: '.diff',
-  currentRef: 'current.json',
-} as const
-
 export interface AssetStorageOptions {
   server: string
   storage?: string
 }
-
+interface Publication {
+  id: string
+  base: string | null
+  version: string
+  current: string
+  indexDigest: string
+  catalogDigest: string
+  destination: string
+}
+function versionPath(version: string) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(version))
+    throw new Error('Invalid asset version')
+  return `patches/${version}`
+}
+function currentFrom(data: Buffer | null): CurrentReference | null {
+  if (!data) return null
+  const c = JSON.parse(data.toString()) as CurrentReference
+  versionPath(c.lastValidIndex || c.ffxiv || '')
+  return c
+}
 export class AssetStorage {
   readonly server: string
   readonly outputRoot: string
@@ -44,112 +64,150 @@ export class AssetStorage {
   readonly diffRoot: string
   readonly currentRefPath: string
   readonly fs: PatchFileSystem
-
   private readonly localStorage: LocalStorage
   private readonly remoteStorage: AbstractStorage | null
   private readonly remoteStorageName?: string
-  private existingAssets = new Map<string, EncodedAssetFormat>()
-
+  private catalog?: AssetCatalog
+  private prepared?: Promise<AssetCatalog>
+  private readonly localLock: string
+  private lockFd: number
   constructor(options: AssetStorageOptions) {
     this.server = options.server
-
-    const storageManager = getStorageManager()
-    const localStorage = storageManager.findLocalStorage()
-    if (!localStorage) {
-      throw new Error('Required at least one valid local storage')
-    }
-
-    this.localStorage = localStorage
-    this.outputRoot = localStorage.getRootPath(uiStoragePathKey, this.server)
-    this.patchRoot = join(this.outputRoot, pathSegment.patches)
-    this.assetRoot = join(this.outputRoot, pathSegment.assets)
-    this.diffRoot = join(this.outputRoot, pathSegment.diff)
-    this.currentRefPath = join(this.outputRoot, pathSegment.currentRef)
-
+    const manager = getStorageManager()
+    const local = manager.findLocalStorage()
+    if (!local) throw new Error('Required at least one valid local storage')
+    this.localStorage = local
+    this.remoteStorageName = options.storage
+    this.remoteStorage = options.storage
+      ? (manager.getStorage(options.storage) ?? null)
+      : null
+    if (options.storage && !this.remoteStorage)
+      throw new Error(`Storage not found: ${options.storage}`)
+    this.outputRoot = local.getRootPath('ui', this.server)
+    this.patchRoot = join(this.outputRoot, 'patches')
+    this.assetRoot = join(this.outputRoot, 'chunks')
+    this.diffRoot = join(this.outputRoot, '.diff')
+    this.currentRefPath = join(this.outputRoot, 'current.json')
     mkdirSync(this.outputRoot, { recursive: true })
-    mkdirSync(this.patchRoot, { recursive: true })
-    mkdirSync(this.assetRoot, { recursive: true })
-    mkdirSync(this.diffRoot, { recursive: true })
-
-    this.remoteStorageName = 'storage' in options ? options.storage : undefined
-    if (this.remoteStorageName) {
-      const remoteStorage = storageManager.getStorage(this.remoteStorageName)
-      if (!remoteStorage) {
-        throw new Error(
-          `Storage '${this.remoteStorageName}' not found. Available storages: ${storageManager
-            .getStorageNames()
-            .join(', ')}`,
-        )
-      }
-      this.remoteStorage = remoteStorage
-    } else {
-      this.remoteStorage = null
+    this.localLock = join(this.outputRoot, '.asset-build.lock')
+    try {
+      this.lockFd = openSync(this.localLock, 'wx')
+      writeFileSync(this.lockFd, JSON.stringify({ pid: process.pid }))
+    } catch (e) {
+      throw new Error(
+        'Asset workspace is locked; stop the previous writer before removing ' +
+          this.localLock,
+        { cause: e },
+      )
     }
-
-    this.fs = new PatchFileSystem(this.diffRoot, allowList)
+    this.fs = new PatchFileSystem(this.diffRoot, [`${uiSqPackFile}.*`])
   }
-
-  hasRemoteStorage(): boolean {
+  close() {
+    this.catalog?.close()
+    this.catalog = undefined
+    if (this.lockFd !== -1) {
+      closeSync(this.lockFd)
+      this.lockFd = -1
+      unlinkSync(this.localLock)
+    }
+  }
+  hasRemoteStorage() {
     return this.remoteStorage !== null
   }
-
-  getRemoteStorageName(): string {
-    if (!this.remoteStorageName) {
+  getRemoteStorageName() {
+    if (!this.remoteStorageName)
       throw new Error('Remote storage is not configured')
-    }
-
     return this.remoteStorageName
   }
-
-  async loadCurrentReference(): Promise<Required<CurrentReference>> {
-    const current = await this.readJson<CurrentReference>(
-      pathSegment.currentRef,
+  private async remoteRead(path: string) {
+    return this.remoteStorage?.readFileStrict(this.server, 'ui', path) ?? null
+  }
+  private async prepare(): Promise<AssetCatalog> {
+    if (this.prepared) return this.prepared
+    this.prepared = (async () => {
+      const path = join(this.outputRoot, catalogFileName)
+      if (!existsSync(path) && this.remoteStorage) {
+        const current = await this.remoteRead('current.json'),
+          ref = currentFrom(current)
+        if (ref) {
+          if (!ref.publication)
+            throw new Error(
+              'Remote storage is not chunk-based; use a new destination',
+            )
+          const catalog = await this.remoteRead(catalogPath(ref.publication))
+          if (!catalog) throw new Error('Published catalog is missing')
+          atomicWrite(path, catalog)
+        }
+        const db = new AssetCatalog(path, this.outputRoot)
+        this.catalog = db
+        db.validate()
+        db.set('base', current ? digest(current) : 'null')
+      } else this.catalog = new AssetCatalog(path, this.outputRoot)
+      if (!this.catalog) throw new Error('Catalog initialization failed')
+      return this.catalog
+    })()
+    return this.prepared
+  }
+  async loadCurrentReference(): Promise<
+    Required<Pick<CurrentReference, 'ffxiv' | 'lastValidIndex'>>
+  > {
+    const current = currentFrom(
+      this.remoteStorage
+        ? await this.remoteRead('current.json')
+        : await this.localStorage.readFileStrict(
+            this.server,
+            'ui',
+            'current.json',
+          ),
     )
     const ffxiv = current?.ffxiv || baseGameVersion
-    return {
-      ffxiv,
-      lastValidIndex: current?.lastValidIndex || ffxiv,
-    }
+    return { ffxiv, lastValidIndex: current?.lastValidIndex || ffxiv }
   }
-
-  async loadLocalCurrentReference(): Promise<Required<CurrentReference>> {
-    const current = await this.readLocalJson<CurrentReference>(
-      pathSegment.currentRef,
+  async loadLocalCurrentReference(): Promise<
+    Required<Pick<CurrentReference, 'ffxiv' | 'lastValidIndex'>>
+  > {
+    const current = currentFrom(
+      await this.localStorage.readFileStrict(this.server, 'ui', 'current.json'),
     )
     const ffxiv = current?.ffxiv || baseGameVersion
-    return {
-      ffxiv,
-      lastValidIndex: current?.lastValidIndex || ffxiv,
-    }
+    return { ffxiv, lastValidIndex: current?.lastValidIndex || ffxiv }
   }
-
   async loadExistingAssets(
-    version: string,
+    _version: string,
   ): Promise<Map<string, EncodedAssetFormat>> {
-    this.existingAssets = this.remoteStorage
-      ? await this.loadRemoteExistingAssets(version)
-      : await this.scanLocalExistingAssets()
-    return this.existingAssets
+    const db = await this.prepare()
+    if (db.get('pending'))
+      throw new Error(
+        'An asset publication is pending; resume ui-sync before building',
+      )
+    return new Map(
+      db.objects().map((o) => [o.sha256, o.format as EncodedAssetFormat]),
+    )
   }
-
-  getAssetFileList(): string[] {
-    return createAssetFileList(this.existingAssets)
+  async loadAssetState(version: string): Promise<Map<string, UiAssetEntry>> {
+    const db = await this.prepare()
+    if (db.get('version') && db.get('version') !== version)
+      throw new Error(
+        'Local catalog is not the requested baseline; restore the latest published catalog in a fresh workspace',
+      )
+    return new Map(
+      db.paths().map((p) => {
+        if (p.format === 'tex')
+          throw new Error('Build catalogs require encoded images')
+        return [p.path, createAssetStateEntry(p.path, p.sha256, p.format)]
+      }),
+    )
   }
-
   private referenceStorages() {
     return this.remoteStorage
       ? [this.localStorage, this.remoteStorage]
       : [this.localStorage]
   }
-
   async loadReferences() {
-    const references = await loadAssetReferences(
-      this.server,
-      this.referenceStorages(),
+    return this.saveReferences(
+      await loadAssetReferences(this.server, this.referenceStorages()),
     )
-    return this.saveReferences(references)
   }
-
   async saveReferences(references: AssetReferences) {
     return saveAssetReferences(
       this.server,
@@ -157,557 +215,257 @@ export class AssetStorage {
       references,
     )
   }
-
-  async loadAssetState(version: string): Promise<Map<string, UiAssetEntry>> {
-    const state = new Map<string, UiAssetEntry>(
-      await this.loadIconState(version),
-    )
-    const maps = await this.readJson<MapEntry[]>(
-      `${pathSegment.patches}/${version}/maps.json`,
-    )
-    for (const entry of maps ?? []) state.set(entry.path, entry)
-    return state
-  }
-
-  async writeAssetState(version: string, state: Map<string, UiAssetEntry>) {
-    const entries = [...state.values()]
-    // Validate every path and reject collisions before publishing any metadata.
-    const binary = encodeAssetIndex(entries)
-    await this.writePatchJson(
-      version,
-      'icons.json',
-      entries.filter((entry) => 'id' in entry),
-    )
-    await this.writePatchJson(
-      version,
-      'maps.json',
-      entries.filter((entry) => 'territory' in entry),
-    )
-    const path = `${pathSegment.patches}/${version}/${assetIndexFileName}`
-    await this.localStorage.writeFile(
-      this.server,
-      uiStoragePathKey,
-      path,
-      binary,
-    )
-    await this.remoteStorage?.writeFile(
-      this.server,
-      uiStoragePathKey,
-      path,
-      binary,
-      'application/octet-stream',
-    )
-  }
-
-  async loadIconState(version: string): Promise<Map<string, IconEntry>> {
-    const remoteContent = await this.readRemoteJson<
-      Array<Omit<IconEntry, 'path'>>
-    >(`${pathSegment.patches}/${version}/icons.json`)
-    if (remoteContent) {
-      return createIconStateMap(remoteContent)
-    }
-
-    const localContent = await this.readLocalJson<
-      Array<Omit<IconEntry, 'path'>>
-    >(`${pathSegment.patches}/${version}/icons.json`)
-    if (!localContent) {
-      return new Map<string, IconEntry>()
-    }
-
-    return createIconStateMap(localContent)
-  }
-
-  async writePatchJson(
-    version: string,
-    fileName: string,
-    value: unknown,
-  ): Promise<void> {
-    await this.writeJson(`${pathSegment.patches}/${version}/${fileName}`, value)
-  }
-
-  async writeCurrentReference(current: CurrentReference): Promise<void> {
-    const ffxiv = current.ffxiv || baseGameVersion
-    await this.writeJson<CurrentReference>(pathSegment.currentRef, {
-      ffxiv,
-      lastValidIndex: current.lastValidIndex || ffxiv,
-    })
-  }
-
   async ensureEncodedAsset(
     sha256: string,
     nextData: Buffer,
-  ): Promise<{
-    format: EncodedAssetFormat
-    persisted: boolean
-  }> {
-    const existingFormat = this.existingAssets.get(sha256)
-    if (existingFormat) {
-      return {
-        format: existingFormat,
-        persisted: false,
-      }
-    }
-
-    const encoded = await formatTex(nextData, {
-      format: 'auto',
-    })
+  ): Promise<{ format: EncodedAssetFormat; persisted: boolean }> {
+    const db = await this.prepare()
+    const existing = db.object(sha256)
+    if (existing)
+      return { format: existing.format as EncodedAssetFormat, persisted: false }
+    const encoded = await formatTex(nextData, { format: 'auto' })
     const format = encoded.format as EncodedAssetFormat
-
-    const assetPath = getAssetPath(sha256, format)
-    await this.localStorage.writeFile(
-      this.server,
-      uiStoragePathKey,
-      assetPath,
-      encoded.data,
-    )
-    await this.remoteStorage?.writeFile(
-      this.server,
-      uiStoragePathKey,
-      assetPath,
-      encoded.data,
-      getAssetContentType(format),
-    )
-
-    this.existingAssets.set(sha256, format)
-    return { format, persisted: true }
+    // Encoding is parallel; synchronous allocation cannot interleave append offsets.
+    return { format, persisted: db.add(sha256, format, encoded.data) }
   }
-
+  async importEncodedAsset(
+    sha256: string,
+    format: EncodedAssetFormat,
+    data: Buffer,
+  ) {
+    const db = await this.prepare()
+    db.add(sha256, format, data)
+  }
+  async writeAssetState(version: string, state: Map<string, UiAssetEntry>) {
+    const db = await this.prepare()
+    if (db.get('pending'))
+      throw new Error('Resume pending publication before building')
+    const entries = [...state.values()]
+    const index = db.index(entries) // Reject collisions before touching visible metadata.
+    db.savePaths(entries, version)
+    db.set('publication', randomUUID())
+    const prefix = versionPath(version)
+    db.snapshot(join(this.outputRoot, prefix, catalogFileName))
+    atomicWrite(join(this.outputRoot, prefix, 'assets.bin'), index)
+  }
+  async writePatchJson(version: string, fileName: string, value: unknown) {
+    if (!/^[a-zA-Z0-9._-]+\.json$/.test(fileName))
+      throw new Error('Invalid diagnostic filename')
+    atomicWrite(
+      join(this.outputRoot, versionPath(version), fileName),
+      `${JSON.stringify(value, null, 2)}\n`,
+    )
+  }
+  async writeCurrentReference(current: CurrentReference) {
+    const db = await this.prepare()
+    const publication = db.get('publication')
+    if (!publication) throw new Error('No completed asset snapshot')
+    atomicWrite(
+      this.currentRefPath,
+      `${JSON.stringify({ ...current, publication })}\n`,
+    )
+  }
   async syncToRemote(
-    version?: string,
-    options: {
-      syncAssets: boolean
-    } = {
-      syncAssets: false,
-    },
-  ): Promise<void> {
-    const { remoteStorage } = this
-    if (!remoteStorage) {
-      throw new Error('Remote storage is required')
+    _version?: string,
+    _options?: { syncAssets: boolean; resume?: boolean },
+  ) {
+    const remote = this.remoteStorage
+    if (!remote) throw new Error('Remote storage is required')
+    const policy = remote.getPublicationPolicy()
+    await this.publishToRemote(remote, policy, _options?.resume ?? false)
+  }
+  private async publishToRemote(
+    remote: AbstractStorage,
+    policy: PublicationPolicy,
+    resume: boolean,
+  ) {
+    const db = await this.prepare()
+    const current = readFileSync(this.currentRefPath)
+    const ref = currentFrom(current)
+    const version = ref?.lastValidIndex || ref?.ffxiv
+    if (!ref || !version) throw new Error('Missing local current reference')
+    if (!ref.publication || ref.publication !== db.get('publication'))
+      throw new Error('Local snapshot is incomplete')
+    const prefix = versionPath(version)
+    const binary = readFileSync(join(this.outputRoot, prefix, 'assets.bin'))
+    const index = new BinaryAssetIndex(binary)
+    const catalog = readFileSync(join(this.outputRoot, prefix, catalogFileName))
+    const snapshotDb = new AssetCatalog(
+      join(this.outputRoot, prefix, catalogFileName),
+      this.outputRoot,
+      undefined,
+      true,
+    )
+    let chunks: Map<string, { id: string; size: number; digest: string }>
+    try {
+      snapshotDb.validate()
+      if (
+        snapshotDb.get('publication') !== ref.publication ||
+        snapshotDb.get('version') !== version ||
+        !snapshotDb.index(snapshotDb.paths()).equals(binary)
+      )
+        throw new Error('Local catalog/index mismatch')
+      chunks = new Map(snapshotDb.chunks().map((c) => [c.id, c]))
+    } finally {
+      snapshotDb.close()
     }
-
-    await this.loadReferences()
-
-    if (!existsSync(this.outputRoot)) {
-      throw new Error(`Local UI output not found: ${this.outputRoot}`)
-    }
-
-    const progressBar = new SingleBar({
-      format: '{phase} [{bar}] {value}/{total}',
-      hideCursor: true,
-    })
-
-    if (options.syncAssets) {
-      // Use the published remote manifest, not the local target version or an
-      // expensive listing of every remote image object.
-      const remoteCurrent = await this.readRemoteJson<CurrentReference>(
-        pathSegment.currentRef,
-      )
-      const remoteVersion =
-        remoteCurrent?.lastValidIndex ||
-        remoteCurrent?.ffxiv ||
-        version ||
-        (await this.loadLocalCurrentReference()).lastValidIndex
-      const remoteAssets = await this.loadRemoteExistingAssets(
-        remoteVersion,
-        false,
-      )
-      const localAssets = await this.scanLocalExistingAssets()
-
-      const assetUploads = [...localAssets].filter(
-        ([sha256, format]) => remoteAssets.get(sha256) !== format,
-      )
-
-      console.log(
-        `Syncing UI assets for ${this.server} to storage '${this.getRemoteStorageName()}'${version ? ` for patch ${version}` : ''}.`,
-      )
-      console.log(
-        `Local assets: ${localAssets.size}, remote assets: ${remoteAssets.size}, pending uploads: ${assetUploads.length}.`,
-      )
-      console.log(`Upload concurrency: ${syncAssetsConcurrency}.`)
-
-      let uploadedAssets = 0
-      if (assetUploads.length > 0) {
-        console.log(`Uploading ${assetUploads.length} asset file(s)...`)
-        progressBar.start(assetUploads.length, 0, { phase: 'Assets  ' })
-
-        await processWithConcurrency(
-          assetUploads,
-          syncAssetsConcurrency,
-          async ([sha256, format]) => {
-            const assetPath = getAssetPath(sha256, format)
-            const content = await readFile(join(this.outputRoot, assetPath))
-            await remoteStorage.writeFile(
-              this.server,
-              uiStoragePathKey,
-              assetPath,
-              content,
-              getAssetContentType(format),
-            )
-            remoteAssets.set(sha256, format)
-            uploadedAssets += 1
-            progressBar.increment()
-          },
+    let plan: Publication
+    const pending = db.get('pending')
+    if (pending) {
+      if (!resume)
+        throw new Error(
+          'Publication locked by a pending plan; use ui-sync --resume',
         )
-
-        progressBar.stop()
-      } else {
-        console.log(`No asset files need uploading.`)
-      }
-
-      console.log(`Synced ${uploadedAssets} asset file(s).`)
-    }
-
-    const patchFiles = version
-      ? await this.listLocalFiles(this.patchRoot, version)
-      : await this.listLocalFiles(this.patchRoot)
-    const changedPatchFiles = await this.collectChangedPatchFiles(patchFiles)
-
-    console.log(
-      `Patch metadata files queued: ${patchFiles.length}${version ? ` for ${version}` : ' across all local snapshots'}.`,
-    )
-    console.log(
-      `Patch metadata diff check complete: ${changedPatchFiles.length}/${patchFiles.length} file(s) changed.`,
-    )
-
-    let syncedPatchFiles = 0
-    if (changedPatchFiles.length > 0) {
-      console.log(
-        `Uploading ${changedPatchFiles.length} patch metadata file(s)...`,
+      plan = JSON.parse(pending)
+      if (
+        plan.id !== ref.publication ||
+        plan.current !== current.toString() ||
+        plan.indexDigest !== digest(binary) ||
+        plan.catalogDigest !== digest(catalog) ||
+        plan.destination !== remote.getPublicationKey(this.server)
       )
-      progressBar.start(changedPatchFiles.length, 0, { phase: 'Patches ' })
+        throw new Error(
+          'Pending publication does not match local files or destination',
+        )
     } else {
-      console.log(`No patch metadata files need uploading.`)
+      plan = {
+        id: ref.publication,
+        version,
+        current: current.toString(),
+        base: db.get('base') ?? 'null',
+        indexDigest: digest(binary),
+        catalogDigest: digest(catalog),
+        destination: remote.getPublicationKey(this.server),
+      }
+      db.set('pending', JSON.stringify(plan))
     }
-    await processWithConcurrency(
-      changedPatchFiles,
-      syncPatchConcurrency,
-      async (relativePath) => {
-        const content = await readFile(join(this.patchRoot, relativePath))
-        await remoteStorage.writeFile(
-          this.server,
-          uiStoragePathKey,
-          `${pathSegment.patches}/${relativePath}`,
-          content,
-          getContentTypeForPath(relativePath),
-        )
-        syncedPatchFiles += 1
-        progressBar.increment()
-      },
-    )
-    if (changedPatchFiles.length > 0) {
-      progressBar.stop()
-    }
-
-    // Publish the local snapshot reference only after images and metadata.
-    if (existsSync(this.currentRefPath)) {
-      console.log(`Uploading current.json...`)
-      const currentContent = await readFile(this.currentRefPath)
-      await remoteStorage.writeFile(
-        this.server,
-        uiStoragePathKey,
-        pathSegment.currentRef,
-        currentContent,
-        'application/json',
+    const beforeLock = await this.remoteRead('current.json')
+    if (
+      (beforeLock ? digest(beforeLock) : 'null') !== plan.base &&
+      !beforeLock?.equals(current)
+    ) {
+      if (!pending) db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+      throw new Error(
+        'Remote asset baseline changed; rebuild against the latest catalog',
       )
     }
-
-    console.log(
-      `Synced ${syncedPatchFiles} patch metadata file(s) to storage '${this.getRemoteStorageName()}'${version ? ` for ${version}` : ''}.`,
-    )
-  }
-
-  private async readJson<T>(relativePath: string): Promise<T | null> {
-    const remoteContent = await this.readRemoteJson<T>(relativePath)
-    if (remoteContent) {
-      return remoteContent
-    }
-
-    return this.readLocalJson<T>(relativePath)
-  }
-
-  private async readLocalJson<T>(relativePath: string): Promise<T | null> {
-    const content = await this.localStorage.readFile(
+    const lock = await PublicationLock.acquire(
+      remote,
       this.server,
-      uiStoragePathKey,
-      relativePath,
+      policy,
+      plan.id,
+      resume,
     )
-    if (!content) {
-      return null
+    const assertBaseline = async () => {
+      await lock.assertOwned()
+      const latest = await this.remoteRead('current.json')
+      if ((latest ? digest(latest) : 'null') !== plan.base)
+        throw new Error(
+          'Remote asset baseline changed during publication; stopped',
+        )
+      await lock.assertOwned()
     }
-
-    return JSON.parse(content.toString('utf-8')) as T
-  }
-
-  private async readRemoteJson<T>(relativePath: string): Promise<T | null> {
-    if (!this.remoteStorage) {
-      return null
-    }
-
-    const content = await this.remoteStorage.readFile(
-      this.server,
-      uiStoragePathKey,
-      relativePath,
-    )
-    if (!content) {
-      return null
-    }
-
-    return JSON.parse(content.toString('utf-8')) as T
-  }
-
-  private async writeJson<T = unknown>(
-    relativePath: string,
-    value: T,
-  ): Promise<void> {
-    const content = `${JSON.stringify(value, null, 2)}\n`
-    await this.localStorage.writeFile(
-      this.server,
-      uiStoragePathKey,
-      relativePath,
-      content,
-    )
-    if (this.remoteStorage) {
-      await this.writeRemoteJson(relativePath, value)
-    }
-  }
-
-  private async writeRemoteJson(
-    relativePath: string,
-    value: unknown,
-  ): Promise<void> {
-    if (!this.remoteStorage) {
+    const remoteCurrent = await this.remoteRead('current.json')
+    if (remoteCurrent?.equals(current)) {
+      await lock.release()
+      db.set('base', digest(current))
+      db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
       return
     }
-
-    await this.remoteStorage.writeFile(
-      this.server,
-      uiStoragePathKey,
-      relativePath,
-      `${JSON.stringify(value, null, 2)}\n`,
-      'application/json',
-    )
-  }
-
-  private async scanLocalExistingAssets(): Promise<
-    Map<string, EncodedAssetFormat>
-  > {
-    const existingAssets = new Map<string, EncodedAssetFormat>()
-    const directories = await readdir(this.assetRoot, {
-      withFileTypes: true,
-    }).catch(() => [])
-
-    for (const entry of directories) {
-      if (!entry.isDirectory()) {
+    if ((remoteCurrent ? digest(remoteCurrent) : 'null') !== plan.base) {
+      await lock.release()
+      db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+      throw new Error(
+        'Remote asset baseline changed; rebuild against the latest catalog',
+      )
+    }
+    const publishedChunks = new Map<string, { size: number; digest: string }>()
+    const remoteRef = currentFrom(remoteCurrent)
+    if (remoteRef) {
+      if (!remoteRef.publication) throw new Error('Remote is not a chunk store')
+      const bytes = await this.remoteRead(catalogPath(remoteRef.publication))
+      if (!bytes) throw new Error('Published catalog is missing')
+      const temp = join(this.outputRoot, `.remote-${randomUUID()}.sqlite`)
+      atomicWrite(temp, bytes)
+      const remoteDb = new AssetCatalog(temp, this.outputRoot, undefined, true)
+      try {
+        remoteDb.validate()
+        for (const c of remoteDb.chunks()) publishedChunks.set(c.id, c)
+      } finally {
+        remoteDb.close()
+        unlinkSync(temp)
+      }
+    }
+    let uploaded = 0
+    // Upload every catalog chunk, including objects reused by a subsequent build.
+    for (const c of chunks.values()) {
+      const known = publishedChunks.get(c.id)
+      if (known) {
+        if (known.size !== c.size || known.digest !== c.digest)
+          throw new Error('Immutable chunk metadata changed')
         continue
       }
-
-      const files = await readdir(join(this.assetRoot, entry.name), {
-        withFileTypes: true,
-      }).catch(() => [])
-      for (const file of files) {
-        if (!file.isFile()) {
-          continue
-        }
-
-        const parsed = parseAssetRelativePath(`${entry.name}/${file.name}`)
-        if (!parsed) {
-          continue
-        }
-
-        existingAssets.set(parsed.sha256, parsed.format)
-      }
-    }
-
-    return existingAssets
-  }
-
-  private async loadRemoteExistingAssets(
-    version: string,
-    allowListing = true,
-  ): Promise<Map<string, EncodedAssetFormat>> {
-    const remoteAssets = new Map<string, EncodedAssetFormat>()
-    if (!this.remoteStorage) {
-      return remoteAssets
-    }
-
-    const fileList = await this.readRemoteJson<string[]>(
-      `${pathSegment.patches}/${version}/${assetFileListPath}`,
-    )
-    if (fileList) {
-      for (const filePath of fileList) {
-        const parsed = parseAssetRelativePath(filePath)
-        if (parsed) {
-          remoteAssets.set(parsed.sha256, parsed.format)
-        }
-      }
-
-      return remoteAssets
-    }
-
-    if (!allowListing) {
-      console.log(
-        `No remote asset-files.json for ${version}; all local images will be uploaded without listing remote objects.`,
-      )
-      return remoteAssets
-    }
-
-    console.log('Fallback to listing remote files')
-    return this.listRemoteExistingAssets()
-  }
-
-  private async listRemoteExistingAssets(): Promise<
-    Map<string, EncodedAssetFormat>
-  > {
-    const remoteAssets = new Map<string, EncodedAssetFormat>()
-    if (!this.remoteStorage) return remoteAssets
-    const remoteFiles = await this.remoteStorage.listFiles(
-      this.server,
-      uiStoragePathKey,
-      pathSegment.assets,
-    )
-    for (const filePath of remoteFiles) {
-      const parsed = parseAssetRelativePath(filePath)
-      if (parsed) {
-        remoteAssets.set(parsed.sha256, parsed.format)
-      }
-    }
-
-    return remoteAssets
-  }
-
-  private async collectChangedPatchFiles(
-    patchFiles: string[],
-  ): Promise<string[]> {
-    if (patchFiles.length === 0) {
-      return []
-    }
-
-    const changedPatchFiles: string[] = []
-
-    console.log(
-      `Checking ${patchFiles.length} patch metadata file(s) for remote diffs...`,
-    )
-    await processWithConcurrency(
-      patchFiles,
-      syncPatchConcurrency,
-      async (relativePath) => {
-        const localContent = await readFile(join(this.patchRoot, relativePath))
-        const remoteContent = await this.remoteStorage?.readFile(
+      const path = `chunks/${c.id}.bin`,
+        bytes = await readFile(join(this.outputRoot, path))
+      if (bytes.length !== c.size || digest(bytes) !== c.digest)
+        throw new Error(`Corrupt local chunk ${c.id}`)
+      if (
+        await writePublicationObject(
+          remote,
           this.server,
-          uiStoragePathKey,
-          `${pathSegment.patches}/${relativePath}`,
+          policy,
+          lock,
+          path,
+          bytes,
         )
-
-        if (!remoteContent || !localContent.equals(remoteContent)) {
-          changedPatchFiles.push(relativePath)
-        }
-      },
-    )
-
-    return changedPatchFiles.sort()
-  }
-
-  private async listLocalFiles(
-    rootPath: string,
-    prefix = '',
-  ): Promise<string[]> {
-    const targetPath = prefix ? join(rootPath, prefix) : rootPath
-    const entries = await readdir(targetPath, { withFileTypes: true }).catch(
-      () => [],
-    )
-    const files: string[] = []
-
-    for (const entry of entries) {
-      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
-      if (entry.isDirectory()) {
-        files.push(...(await this.listLocalFiles(rootPath, relativePath)))
-      } else {
-        files.push(relativePath.replaceAll('\\', '/'))
-      }
+      )
+        uploaded++
     }
-
-    return files.sort()
+    for (const c of index.chunks)
+      if (chunks.get(c.id)?.size !== c.size)
+        throw new Error('Index/catalog mismatch')
+    await assertBaseline()
+    if (existsSync(join(this.outputRoot, 'references.json'))) {
+      await this.loadReferences()
+      await lock.assertOwned()
+    }
+    for (const name of ['changes.json', 'resolved-index.json']) {
+      const path = `${prefix}/${name}`
+      if (existsSync(join(this.outputRoot, path)))
+        await lock.write(
+          path,
+          readFileSync(join(this.outputRoot, path)),
+          'application/json',
+        )
+    }
+    const snapshot = catalogPath(plan.id)
+    await writePublicationObject(
+      remote,
+      this.server,
+      policy,
+      lock,
+      snapshot,
+      catalog,
+      'application/vnd.sqlite3',
+    )
+    await assertBaseline()
+    await lock.write(`${prefix}/assets.bin`, binary, 'application/octet-stream')
+    await assertBaseline()
+    await lock.write('current.json', current, 'application/json')
+    if (!(await this.remoteRead('current.json'))?.equals(current))
+      throw new Error(
+        'Published current pointer changed; stopped without unlocking',
+      )
+    await lock.release()
+    db.set('base', digest(current))
+    db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+    console.log(
+      `Published ${version}: ${index.count} paths, ${index.chunks.length} referenced chunks, ${uploaded} new chunks`,
+    )
   }
 }
-
-function parseAssetRelativePath(relativePath: string): {
-  sha256: string
-  format: EncodedAssetFormat
-} | null {
-  const normalizedPath = relativePath.replaceAll('\\', '/')
-  const match = normalizedPath.match(
-    /^(?:assets\/)?[0-9a-f]{2}\/([0-9a-f]{64})\.(webp|avif)$/,
-  )
-  if (!match) {
-    return null
-  }
-
-  return {
-    sha256: match[1],
-    format: match[2] as EncodedAssetFormat,
-  }
-}
-
-function getAssetPath(sha256: string, format: EncodedAssetFormat): string {
-  return `${pathSegment.assets}/${sha256.slice(0, 2)}/${sha256}.${format}`
-}
-
-function getAssetContentType(format: EncodedAssetFormat): string {
-  return format === 'avif' ? 'image/avif' : 'image/webp'
-}
-
-function getContentTypeForPath(relativePath: string): string | undefined {
-  if (relativePath.endsWith('.bin')) return 'application/octet-stream'
-  if (relativePath.endsWith('.json')) {
-    return 'application/json'
-  }
-
-  return undefined
-}
-
-function createAssetFileList(existingAssets: Map<string, EncodedAssetFormat>) {
-  return [...existingAssets.entries()]
-    .sort(([leftSha], [rightSha]) => leftSha.localeCompare(rightSha))
-    .map(([sha256, format]) => getAssetPath(sha256, format))
-}
-
-function createIconStateMap(entries: Array<Omit<IconEntry, 'path'>>) {
-  return new Map(
-    entries.map((entry) => [
-      toIconPath(entry.id, entry.version, entry.hr),
-      {
-        ...entry,
-        path: toIconPath(entry.id, entry.version, entry.hr),
-      },
-    ]),
-  )
-}
-
-function toIconPath(id: number, version: string, hr: boolean) {
-  const paddedId = id.toString().padStart(6, '0')
-  const group = (Math.floor(id / 1000) * 1000).toString().padStart(6, '0')
-  return `ui/icon/${group}${version}/${paddedId}${hr ? '_hr1' : ''}.tex`
-}
-
-async function processWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  if (items.length === 0) {
-    return
-  }
-
-  let nextIndex = 0
-  const workerCount = Math.min(concurrency, items.length)
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < items.length) {
-        const item = items[nextIndex]
-        nextIndex += 1
-        await worker(item)
-      }
-    }),
-  )
+function catalogPath(id: string) {
+  if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id))
+    throw new Error('Invalid publication UUID')
+  return `catalogs/${id}.sqlite`
 }

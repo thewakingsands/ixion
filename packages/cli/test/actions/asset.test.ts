@@ -12,6 +12,7 @@ import { extractLocalUiAssets } from '../../src/actions/asset-local'
 import { syncUiAssetsToRemoteStorage } from '../../src/actions/asset-ui-icons'
 import { createAssetStateEntry, processTextures } from '../../src/actions/asset/patch'
 import { BinaryAssetIndex } from '../../src/actions/asset/binary-index'
+import { AssetCatalog } from '../../src/actions/asset/catalog'
 import { AssetStorage } from '../../src/actions/asset/storage'
 import type { UiAssetEntry } from '../../src/actions/asset/types'
 import { generateLocalAssetPaths, validateIndexFile } from '../../src/actions/asset/ui-index'
@@ -134,94 +135,55 @@ it('uses real SqPack indexes for patch selection and full local extraction', asy
     vi.mocked(formatTex).mockClear()
     await extractLocalUiAssets(game, definitions, { server })
     expect(JSON.parse(await readFile(join(output, 'references.json'), 'utf8'))).toEqual(references)
-    expect(JSON.parse(await readFile(join(manifests, 'icons.json'), 'utf8'))).toHaveLength(6)
-    expect(JSON.parse(await readFile(join(manifests, 'maps.json'), 'utf8'))).toHaveLength(1)
+    const catalog=new AssetCatalog(join(output,'catalog.sqlite'),output,undefined,true)
+    const paths=catalog.paths()
+    const chunks=catalog.chunks()
+    catalog.close()
+    expect(paths).toHaveLength(7)
+    expect(chunks).toHaveLength(1)
+    await expect(readFile(join(manifests,'icons.json'))).rejects.toMatchObject({code:'ENOENT'})
+    await expect(readFile(join(manifests,'maps.json'))).rejects.toMatchObject({code:'ENOENT'})
+    await expect(readFile(join(manifests,'asset-files.json'))).rejects.toMatchObject({code:'ENOENT'})
     const binary = new BinaryAssetIndex(await readFile(join(manifests, 'assets.bin')))
     expect(binary.count).toBe(7)
-    for (const path of [icon, map, ...extraIcons]) expect(binary.lookup(path)).toBeDefined()
-    const originalJson = await readFile(join(manifests, 'icons.json'))
-    const originalBinary = await readFile(join(manifests, 'assets.bin'))
-    const collisionPaths = ['ui/icon/000000/15f019c1.tex', 'ui/icon/000000/2be409ef.tex']
-    const collisionState = new Map<string, UiAssetEntry>(collisionPaths.map((path) => [path, {
-      path, id: 0, version: '', hr: false, sha256: '01'.repeat(32), format: 'webp',
-    }]))
-    await expect(new AssetStorage({ server }).writeAssetState(version, collisionState)).rejects.toThrow('collision')
-    expect(await readFile(join(manifests, 'icons.json'))).toEqual(originalJson)
-    expect(await readFile(join(manifests, 'assets.bin'))).toEqual(originalBinary)
-    const assetFiles = JSON.parse(await readFile(join(manifests, 'asset-files.json'), 'utf8')) as string[]
-    expect(assetFiles).toHaveLength(2)
-    expect(['same texture', 'unreferenced']).toContain((await readFile(join(output, assetFiles[0]))).toString())
-    const currentReference = { ffxiv: version, lastValidIndex: version }
-    expect(JSON.parse(await readFile(join(output, 'current.json'), 'utf8'))).toEqual(currentReference)
-    await expect(readFile(join(root, 'remote/custom-ui', server, 'current.json'))).rejects.toMatchObject({ code: 'ENOENT' })
-    await extractLocalUiAssets(game, definitions, { server })
-    expect(formatTex).toHaveBeenCalledTimes(2)
-
-    const remote = manager.getStorage('minio')!
-    const remoteCheckpoint = JSON.stringify({ ffxiv: '2026.08.01.0000.0000', lastValidIndex: '2026.08.01.0000.0000' })
-    await remote.writeFile(server, 'ui', 'current.json', remoteCheckpoint)
-    // Trust only the published remote version's manifest, not a future snapshot.
-    await remote.writeFile(server, 'ui', `patches/${version}/asset-files.json`, JSON.stringify(assetFiles))
-    await remote.writeFile(server, 'ui', 'patches/2026.08.01.0000.0000/asset-files.json', JSON.stringify([assetFiles[1]]))
-    await remote.writeFile(server, 'ui', assetFiles[1], await readFile(join(output, assetFiles[1])))
-    const listing = vi.spyOn(remote, 'listFiles').mockRejectedValue(new Error('Remote listing is forbidden'))
-    const uploads = vi.spyOn(remote, 'writeFile')
-    await syncUiAssetsToRemoteStorage({ server, storage: 'minio' })
-    expect(await remote.readFile(server, 'ui', assetFiles[0])).toEqual(await readFile(join(output, assetFiles[0])))
-    expect(JSON.parse((await remote.readFile(server, 'ui', `patches/${version}/maps.json`))!.toString())).toHaveLength(1)
-    expect(JSON.parse((await remote.readFile(server, 'ui', 'current.json'))!.toString())).toEqual(currentReference)
-    const uploadedPaths = uploads.mock.calls.map((call) => call[2])
-    expect(uploadedPaths.indexOf(assetFiles[0])).toBeLessThan(uploadedPaths.indexOf(`patches/${version}/maps.json`))
-    expect(uploadedPaths.at(-1)).toBe('current.json')
-    const binaryPath = `patches/${version}/assets.bin`
-    expect(await remote.readFile(server, 'ui', binaryPath)).toEqual(await readFile(join(manifests, 'assets.bin')))
-    expect(uploadedPaths.indexOf(assetFiles[0])).toBeLessThan(uploadedPaths.indexOf(binaryPath))
-    expect(uploads.mock.calls.find((call) => call[2] === binaryPath)?.[4]).toBe('application/octet-stream')
-    expect(uploadedPaths.filter((path) => path.startsWith('assets/'))).toEqual([assetFiles[0]])
-    expect(listing).not.toHaveBeenCalled()
-    uploads.mockClear()
-    await syncUiAssetsToRemoteStorage({ server, storage: 'minio' })
-    expect(uploads.mock.calls.some((call) => call[2].startsWith('assets/'))).toBe(false)
-    // A missing manifest conservatively reuploads images, without listing.
-    await unlink(join(root, 'remote/custom-ui', server, 'patches', version, 'asset-files.json'))
-    uploads.mockClear()
-    await syncUiAssetsToRemoteStorage({ server, storage: 'minio' })
-    expect(uploads.mock.calls.filter((call) => call[2].startsWith('assets/'))).toHaveLength(assetFiles.length)
-    expect(listing).not.toHaveBeenCalled()
-
-    const localCheckpoint = JSON.stringify({ ffxiv: '2026.07.01.0000.0000', lastValidIndex: '2026.07.01.0000.0000' })
-    await writeFile(join(output, 'current.json'), localCheckpoint)
-    const extraReferences = join(root, 'extra-references.json')
-    await writeFile(extraReferences, JSON.stringify({ icons: [123], maps: [] }))
-    await extractLocalUiAssets(game, definitions, { server, references: extraReferences })
-    expect(JSON.parse(await readFile(join(output, 'current.json'), 'utf8'))).toEqual(currentReference)
-    const expectedReferences = { icons: [123, 51474], maps: ['s1d1/00'] }
-    expect(JSON.parse(await readFile(join(output, 'references.json'), 'utf8'))).toEqual(expectedReferences)
-    expect(JSON.parse(await readFile(extraReferences, 'utf8'))).toEqual(expectedReferences)
-    expect(formatTex).toHaveBeenCalledTimes(2)
-    // Extraction and metadata failures must not publish an incomplete version.
-    for (const method of ['ensureEncodedAsset', 'writeAssetState', 'writePatchJson'] as const) {
-      await writeFile(join(output, 'current.json'), localCheckpoint)
-      const failure = vi.spyOn(AssetStorage.prototype, method).mockRejectedValue(new Error(`failed ${method}`))
-      try {
-        await expect(extractLocalUiAssets(game, definitions, { server })).rejects.toThrow(`failed ${method}`)
-        expect(await readFile(join(output, 'current.json'), 'utf8')).toBe(localCheckpoint)
-      } finally {
-        failure.mockRestore()
-      }
-    }
-    const local = manager.findLocalStorage()!
-    const writeLocal = local.writeFile.bind(local)
-    const binaryWriteFailure = vi.spyOn(local, 'writeFile').mockImplementation(async (...args) => {
-      if (args[2].endsWith('/assets.bin')) throw new Error('failed binary index write')
-      return writeLocal(...args)
-    })
+    for (const path of [icon,map,...extraIcons]) expect(binary.lookup(path)).toBeDefined()
+    const originalBinary=await readFile(join(manifests,'assets.bin'))
+    const collisionPaths=['ui/icon/000000/15f019c1.tex','ui/icon/000000/2be409ef.tex']
+    const storage=new AssetStorage({server})
     try {
-      await expect(extractLocalUiAssets(game, definitions, { server })).rejects.toThrow('failed binary index write')
-      expect(await readFile(join(output, 'current.json'), 'utf8')).toBe(localCheckpoint)
-    } finally {
-      binaryWriteFailure.mockRestore()
-    }
+      const collisionState=new Map<string,UiAssetEntry>(collisionPaths.map(path=>[path,{path,id:0,version:'',hr:false,sha256:paths[0].sha256,format:'webp'}]))
+      await expect(storage.writeAssetState(version,collisionState)).rejects.toThrow('collision')
+    }finally{storage.close()}
+    expect(await readFile(join(manifests,'assets.bin'))).toEqual(originalBinary)
+    const chunkBytes=await readFile(join(output,'chunks',chunks[0].id+'.bin'))
+    const iconRef=binary.lookup(icon)!
+    expect(chunkBytes.subarray(iconRef.offset,iconRef.offset+iconRef.size).toString()).toBe('same texture')
+    expect(JSON.parse(await readFile(join(output,'current.json'),'utf8'))).toMatchObject({ffxiv:version,lastValidIndex:version,publication:expect.any(String)})
+    await extractLocalUiAssets(game,definitions,{server})
+    expect(formatTex).toHaveBeenCalledTimes(2)
+    const remote=manager.getStorage('minio')!
+    const listing=vi.spyOn(remote,'listFiles').mockRejectedValue(new Error('Remote listing is forbidden'))
+    const creates=vi.spyOn(remote,'createFile'),uploads=vi.spyOn(remote,'writeFile')
+    await syncUiAssetsToRemoteStorage({server,storage:'minio'})
+    expect(await remote.readFile(server,'ui','chunks/'+chunks[0].id+'.bin')).toEqual(chunkBytes)
+    expect(await remote.readFile(server,'ui','current.json')).toEqual(await readFile(join(output,'current.json')))
+    expect(uploads.mock.calls.map(c=>c[2])).toEqual(['references.json',`patches/${version}/assets.bin`,'current.json'])
+    expect(creates.mock.calls.filter(c=>c[2].startsWith('chunks/'))).toHaveLength(1)
+    expect(listing).not.toHaveBeenCalled()
+    creates.mockClear();uploads.mockClear()
+    await syncUiAssetsToRemoteStorage({server,storage:'minio'})
+    expect(creates.mock.calls.filter(c=>c[2].startsWith('chunks/'))).toHaveLength(0)
+    expect(uploads).not.toHaveBeenCalled()
+    const extraReferences=join(root,'extra-references.json')
+    await writeFile(extraReferences,JSON.stringify({icons:[123],maps:[]}))
+    await extractLocalUiAssets(game,definitions,{server,references:extraReferences})
+    expect(JSON.parse(await readFile(join(output,'references.json'),'utf8'))).toEqual({icons:[123,51474],maps:['s1d1/00']})
+    const localCheckpoint=await readFile(join(output,'current.json'))
+    const failure=vi.spyOn(AssetStorage.prototype,'writeAssetState').mockRejectedValue(new Error('failed metadata'))
+    try{
+      await expect(extractLocalUiAssets(game,definitions,{server})).rejects.toThrow('failed metadata')
+      expect(await readFile(join(output,'current.json'))).toEqual(localCheckpoint)
+    }finally{failure.mockRestore()}
     // The fallback remains exhaustive when only index2 is installed.
     await unlink(join(pack, '060000.win32.index'))
     const fallback = generateLocalAssetPaths(game, { icons: [], maps: [] })
