@@ -14,7 +14,7 @@ export interface StoragePathMap {
 
 export interface StorageConfig {
   name: string
-  type: 'local' | 'minio'
+  type: 'local' | 's3' | 'minio'
   config: Record<string, any>
 }
 

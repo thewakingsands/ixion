@@ -2,7 +2,7 @@ import { tmpdir } from 'node:os'
 import { sortVersions } from '@ffcafe/ixion-utils'
 import type { AbstractStorage, StorageConfig, VersionData } from './abstract'
 import { LocalStorage } from './adapter/local'
-import { MinioStorage } from './adapter/minio'
+import { S3Storage } from './adapter/s3'
 
 export interface SyncSummary {
   synced: string[]
@@ -23,7 +23,8 @@ export class StorageManager {
             storage = new LocalStorage(storageConfig)
             break
           case 'minio':
-            storage = new MinioStorage(storageConfig)
+          case 's3':
+            storage = new S3Storage(storageConfig)
             break
           default:
             console.warn(`⚠️ Unknown storage type: ${storageConfig.type}`)

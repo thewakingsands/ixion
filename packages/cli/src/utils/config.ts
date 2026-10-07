@@ -49,9 +49,9 @@ export function readConfig(configPath?: string): IxionConfig {
         )
       }
 
-      if (!['local', 'minio'].includes(storage.type)) {
+      if (!['local', 's3', 'minio'].includes(storage.type)) {
         throw new Error(
-          `Unsupported storage type: ${storage.type}. Supported types: local, minio`,
+          `Unsupported storage type: ${storage.type}. Supported types: local, s3, minio`,
         )
       }
     }

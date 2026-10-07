@@ -57,6 +57,8 @@ console.log(`Synced ${result.synced.length} versions`)
 
 Stores version files on the local filesystem with direct file access.
 
-### MinioStorage
+### S3Storage (MinioStorage alias)
 
-Stores version files in a MinIO object storage bucket. Version directories are automatically compressed into zip files for efficient storage and transfer.
+Uses a shared S3 implementation for Garage, MinIO and other compatible services.
+Use `type: 's3'`; `type: 'minio'` remains an alias. Version directories are
+automatically compressed into ZIP files for transfer.

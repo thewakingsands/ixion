@@ -12,16 +12,16 @@
       }
     },
     {
-      "name": "minio-backup",
-      "type": "minio",
+      "name": "garage-33",
+      "type": "s3",
       "config": {
         "endPoint": "localhost",
-        "port": 9000,
+        "port": 3900,
         "useSSL": false,
-        "accessKey": "minioadmin",
-        "secretKey": "minioadmin",
+        "accessKey": "replace-with-garage-access-key",
+        "secretKey": "replace-with-garage-secret-key",
         "bucketName": "ixion-versions",
-        "region": "us-east-1",
+        "region": "garage",
         "prefix": "ffxiv",
         "paths": {
           "versions": "versions",
