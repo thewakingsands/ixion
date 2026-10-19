@@ -1,6 +1,6 @@
 import { setImmediate } from 'node:timers/promises'
+import { SqPackReader } from '@ffcafe/elpis-sqpack'
 import type { AssetResourceReader } from '@ffcafe/ixion-exd'
-import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import { uiSqPackFile } from '../../config'
 import { calculateHash } from '../../utils/hash'
 import { mapUnordered } from '../../utils/map-unordered'

@@ -1,4 +1,4 @@
-import { ExcelColumnDataType } from '@ffcafe/ixion-sqpack'
+import { ExcelColumnDataType } from '@ffcafe/elpis-sqpack'
 import { describe, expect, it } from 'vitest'
 import { CSVExporter } from '../src/csv'
 

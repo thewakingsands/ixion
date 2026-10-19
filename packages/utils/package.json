@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "yauzl": "^3.3.0",
-    "yazl": "^3.3.1"
+    "yazl": "^3.3.1",
+    "@ffcafe/elpis-sqpack": "0.1.0"
   }
 }

@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { SqPackReader } from '@ffcafe/elpis-sqpack'
 import { extractExdFilesFromReader } from '@ffcafe/ixion-exd'
-import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'
 import { getStorageManager } from '../utils/storage'

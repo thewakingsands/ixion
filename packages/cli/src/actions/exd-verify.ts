@@ -5,7 +5,7 @@ import {
   readExhHeader,
   readExlFile,
   SqPackReader,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import type { StorageManager } from '@ffcafe/ixion-storage'
 import type { Language } from '@ffcafe/ixion-utils'
 import { exdSqPackFile } from '../config'

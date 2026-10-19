@@ -1,6 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { DefinitionProvider } from '@ffcafe/ixion-exd'
 import {
   EXDReader,
   GameSqPackReader,
@@ -8,7 +7,8 @@ import {
   type LgbVector3,
   readExhHeader,
   readLgbFile,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
+import type { DefinitionProvider } from '@ffcafe/ixion-exd'
 import type { Language } from '@ffcafe/ixion-utils'
 
 type Row = Record<string, number | string>

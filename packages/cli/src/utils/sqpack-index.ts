@@ -1,10 +1,10 @@
-import { generateIconDirectories } from '@ffcafe/ixion-exd'
 import {
   crc32,
   type IndexDirectoryHashTableEntry,
   type IndexHashData,
   mergeIndexHash,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
+import { generateIconDirectories } from '@ffcafe/ixion-exd'
 
 export interface ResolvedFileIndex {
   path?: string

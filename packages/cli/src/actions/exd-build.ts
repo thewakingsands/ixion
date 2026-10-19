@@ -1,11 +1,5 @@
 import { writeFileSync } from 'node:fs'
 import {
-  getStringColumnIndexes,
-  readColumnsFromSheet,
-  rootExlFile,
-  validateHeadersCompatible,
-} from '@ffcafe/ixion-exd'
-import {
   EXDReader,
   EXDWriter,
   type ExhHeader,
@@ -19,7 +13,13 @@ import {
   SqPackWriter,
   writeExhHeader,
   writeExlFile,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
+import {
+  getStringColumnIndexes,
+  readColumnsFromSheet,
+  rootExlFile,
+  validateHeadersCompatible,
+} from '@ffcafe/ixion-exd'
 import { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
 import { ExdBase, type ServerVersion } from './exd-base'

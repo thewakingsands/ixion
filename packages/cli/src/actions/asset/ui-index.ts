@@ -1,12 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { calculateIndexHash, readIndexEntries } from '@ffcafe/elpis-sqpack'
 import {
   type AssetReferences,
   generateAssetPaths,
   generateIconPaths,
   generateMapAssetPaths,
 } from '@ffcafe/ixion-exd'
-import { calculateIndexHash, readIndexEntries } from '@ffcafe/ixion-sqpack'
 import { uiSqPackFile } from '../../config'
 import type { PatchFileSystem } from '../../utils/patch-fs'
 import {

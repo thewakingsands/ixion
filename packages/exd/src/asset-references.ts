@@ -3,7 +3,7 @@ import {
   getExdPath,
   readExhHeader,
   readExlFile,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import type { DefinitionProvider, FlatField } from './schema/interface'
 
 export interface AssetReferences {

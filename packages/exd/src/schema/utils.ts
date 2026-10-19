@@ -1,4 +1,4 @@
-import { ExcelColumnDataType } from '@ffcafe/ixion-sqpack'
+import { ExcelColumnDataType } from '@ffcafe/elpis-sqpack'
 
 const typeMap: Record<ExcelColumnDataType, string> = {
   [ExcelColumnDataType.String]: 'str',

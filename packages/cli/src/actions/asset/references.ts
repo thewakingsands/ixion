@@ -1,11 +1,11 @@
 import { join } from 'node:path'
+import { GameSqPackReader } from '@ffcafe/elpis-sqpack'
 import {
   AssetReferenceCollector,
   type AssetReferences,
   collectAssetReferences,
   EXDSchemaDefinitionProvider,
 } from '@ffcafe/ixion-exd'
-import { GameSqPackReader } from '@ffcafe/ixion-sqpack'
 import type { AbstractStorage, StorageManager } from '@ffcafe/ixion-storage'
 import { getWorkingDir } from '../../utils/root'
 import { ExdBase } from '../exd-base'

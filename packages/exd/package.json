@@ -28,11 +28,12 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@ffcafe/ixion-sqpack": "workspace:*",
+    "@ffcafe/elpis-sqpack": "0.1.0",
     "@ffcafe/ixion-utils": "workspace:*",
     "cli-progress": "^3.12.0",
     "debug": "catalog:",
     "yaml": "^2.8.4",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@ffcafe/elpis-sestring": "0.1.0"
   }
 }

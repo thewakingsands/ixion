@@ -1,4 +1,4 @@
-import type { ExcelColumn } from '@ffcafe/ixion-sqpack'
+import type { ExcelColumn } from '@ffcafe/elpis-sqpack'
 
 export interface FlatField {
   index: number
