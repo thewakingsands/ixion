@@ -1,12 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { GameSqPackReader } from '@ffcafe/elpis-sqpack'
 import {
   AssetReferenceCollector,
   type AssetReferences,
   collectAssetReferences,
   type DefinitionProvider,
 } from '@ffcafe/ixion-exd'
-import { GameSqPackReader } from '@ffcafe/ixion-sqpack'
 import { readGameVersion } from '../utils/game'
 import { processTextures } from './asset/patch'
 import { AssetStorage } from './asset/storage'

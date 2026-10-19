@@ -1,7 +1,5 @@
+import { ExpressionType, formatSeString, ParameterType, parseExpressions, parseSeString, Type } from '@ffcafe/elpis-sestring'
 import { describe, expect, it } from 'vitest'
-import { formatSeString, parseSeString, Type } from '../src/sestring'
-import { ExpressionType, ParameterType } from '../src/sestring/interface'
-import { parseExpressions } from '../src/sestring/reader'
 
 describe('expressions', () => {
   it('should parse simple integer', () => {

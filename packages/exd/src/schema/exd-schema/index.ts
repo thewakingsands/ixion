@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ExcelColumn } from '@ffcafe/ixion-sqpack'
+import type { ExcelColumn } from '@ffcafe/elpis-sqpack'
 import yaml from 'yaml'
 import type { DefinitionProvider, FlatField } from '../interface'
 import { EXDSchema, NamedFieldSchema, UnnamedFieldSchema } from './interface'

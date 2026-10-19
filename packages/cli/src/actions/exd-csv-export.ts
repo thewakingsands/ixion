@@ -1,13 +1,13 @@
 import { rmSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { SqPackReader } from '@ffcafe/elpis-sqpack'
 import {
   AssetReferenceCollector,
   CSVExporter,
   type DefinitionProvider,
   ExdCSVFormat,
 } from '@ffcafe/ixion-exd'
-import { SqPackReader } from '@ffcafe/ixion-sqpack'
 import type { Language } from '@ffcafe/ixion-utils'
 import { exdSqPackFile } from '../config'
 import { getTempDir } from '../utils/root'

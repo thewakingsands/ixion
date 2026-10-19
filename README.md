@@ -5,6 +5,9 @@ Ixion contains a CLI and several packages working with FFXIV patches and data fi
 ## Usage
 
 ```bash
+# Initialize pinned schema repositories
+git submodule update --init --recursive
+
 # Install dependencies and build packages
 pnpm i
 pnpm build
@@ -295,3 +298,12 @@ The WebP/AVIF quality settings are unchanged.
 [GPL v3](LICENSE)
 
 FINAL FANTASY, FINAL FANTASY XIV, FFXIV, SQUARE ENIX, and the SQUARE ENIX logo are registered trademarks or trademarks of Square Enix Holdings Co., Ltd.
+
+## Shared data libraries
+
+SqPack and SeString come from the exact npm versions of `@ffcafe/elpis-sqpack`
+and `@ffcafe/elpis-sestring` declared in the consuming packages. Upgrade these
+versions together, update the lockfile, then rebuild and run the tests.
+Use their public ESM entry points, not deep imports or a mixture of ESM and CommonJS.
+Language helpers in ixion-utils re-export the same elpis definitions.
+Debug namespaces are `elpis:sqpack:*` and `elpis:sestring:*`.

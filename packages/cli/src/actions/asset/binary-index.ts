@@ -1,4 +1,4 @@
-import { calculateIndexHash, crc32 } from '@ffcafe/ixion-sqpack'
+import { calculateIndexHash, crc32 } from '@ffcafe/elpis-sqpack'
 import type { AssetFormat } from './types'
 
 export const assetIndexFileName = 'assets.bin'

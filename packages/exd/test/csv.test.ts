@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { SqPackReader } from '@ffcafe/ixion-sqpack'
+import { SqPackReader } from '@ffcafe/elpis-sqpack'
 import { Language } from '@ffcafe/ixion-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readExhHeaderFromReader, SaintcoinachDefinitionProvider } from '../src'

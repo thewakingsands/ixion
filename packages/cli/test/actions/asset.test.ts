@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   EXDWriter, ExcelColumnDataType, ExcelVariant, type ExhHeader,
   SqPackReader, SqPackWriter, writeExhHeader, writeExlFile, calculateIndexHash,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import { StorageManager } from '@ffcafe/ixion-storage'
 import { formatTex } from '@ffcafe/ixion-tex'
 import { expect, it, vi } from 'vitest'

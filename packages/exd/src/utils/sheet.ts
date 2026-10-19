@@ -4,7 +4,7 @@ import {
   type ExhHeader,
   getExdPath,
   type SqPackReader,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import type { Language } from '@ffcafe/ixion-utils'
 
 /**

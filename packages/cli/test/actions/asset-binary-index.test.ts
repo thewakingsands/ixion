@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
-import { crc32 } from '@ffcafe/ixion-sqpack'
+import { crc32 } from '@ffcafe/elpis-sqpack'
 import { BinaryAssetIndex, encodeAssetIndex, type AssetIndexSource } from '../../src/actions/asset/binary-index'
 const entry:AssetIndexSource={path:'ui/icon/000000/000000.tex',chunk:'01010101-0101-0101-0101-010101010101',chunkSize:15,offset:2,size:11,format:'webp'}
 const fixture=Buffer.from(readFileSync(new URL('../fixtures/ixas-v2.hex',import.meta.url),'utf8').trim(),'hex')

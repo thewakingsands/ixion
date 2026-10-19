@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { ExcelColumnDataType, type SqPackReader } from '@ffcafe/ixion-sqpack'
+import { formatSeString, parseSeString } from '@ffcafe/elpis-sestring'
+import { ExcelColumnDataType, type SqPackReader } from '@ffcafe/elpis-sqpack'
 import { formatLanguage, Language } from '@ffcafe/ixion-utils'
 import { SingleBar } from 'cli-progress'
-import { formatSeString, parseSeString } from './sestring'
 import {
   type ExdFilter,
   getStringColumnIndexes,

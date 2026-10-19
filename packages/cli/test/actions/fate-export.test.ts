@@ -1,4 +1,4 @@
-import { EXDWriter, ExcelColumnDataType, ExcelVariant, type ExhHeader, writeExhHeader } from '@ffcafe/ixion-sqpack'
+import { EXDWriter, ExcelColumnDataType, ExcelVariant, type ExhHeader, writeExhHeader } from '@ffcafe/elpis-sqpack'
 import { expect, it } from 'vitest'
 import { collectFateLocations, fateMapCoordinates } from '../../src/actions/fate-export'
 

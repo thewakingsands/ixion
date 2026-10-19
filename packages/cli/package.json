@@ -31,7 +31,7 @@
   "dependencies": {
     "@ffcafe/ixion-exd": "workspace:*",
     "@ffcafe/ixion-server": "workspace:*",
-    "@ffcafe/ixion-sqpack": "workspace:*",
+    "@ffcafe/elpis-sqpack": "0.1.0",
     "@ffcafe/ixion-storage": "workspace:*",
     "@ffcafe/ixion-tex": "workspace:*",
     "@ffcafe/ixion-utils": "workspace:*",

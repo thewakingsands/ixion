@@ -1,7 +1,7 @@
 import {
   EXDWriter, ExcelColumnDataType, ExcelVariant, type ExhHeader,
   getExdPath, writeExhHeader, writeExlFile,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import { expect, it } from 'vitest'
 import { AssetReferenceCollector, collectAssetReferences, generateAssetPaths, generateIconDirectories, generateIconPaths, generateMapAssetPaths } from '../src/asset-references'
 import { CSVExporter } from '../src/csv'

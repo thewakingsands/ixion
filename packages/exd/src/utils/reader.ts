@@ -5,7 +5,7 @@ import {
   readExhHeader,
   readExlFile,
   type SqPackReader,
-} from '@ffcafe/ixion-sqpack'
+} from '@ffcafe/elpis-sqpack'
 import $debug from 'debug'
 import { rootExlFile } from '../const'
 import type { ExdFilter } from './filter'
