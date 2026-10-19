@@ -1,4 +1,4 @@
-name: CI
+name: Update game data
 
 on:
   schedule:
@@ -6,10 +6,6 @@ on:
     - cron: "0 8 * * 2"
   workflow_dispatch:
     inputs:
-      skip_update:
-        description: "Skip update step"
-        default: false
-        type: boolean
       force_release:
         description: "Force release"
         default: false
@@ -20,16 +16,25 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ixion-game-data-update
+  cancel-in-progress: false
 
 jobs:
   update-exd-schema:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
+          ref: main
           submodules: true
 
       - name: Update EXDSchema submodule
@@ -48,34 +53,48 @@ jobs:
             git push
           fi
 
+      - name: Record source revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
-    runs-on: ubuntu-latest
     needs: update-exd-schema
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.update-exd-schema.outputs.sha }}
+
+  update:
+    needs: [build, update-exd-schema]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
+      # ci update commits released versions and tags releases in this checkout.
+      - name: Checkout source revision
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
-          submodules: true
+          ref: ${{ needs.update-exd-schema.outputs.sha }}
+
+      - name: Track main for version commits
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git checkout -B main
+          git branch --set-upstream-to=origin/main main
+
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ixion-cli
+
+      - name: Extract CLI artifact
+        run: tar -xf ixion-cli.tar
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - uses: ilammy/setup-nasm@v1
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build project
-        run: pnpm build
-
       - name: Run CI update command
-        if: inputs.skip_update != true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
@@ -89,36 +108,15 @@ jobs:
           node packages/cli/dist/index.js ci init
           node packages/cli/dist/index.js ci update ${{ env.FORCE_RELEASE }} ${{ env.ALLOW_MISSING_REMOTE_VERSION }}
 
-      - name: Prepare CLI artifact
-        run: |
-          rm -rf .ci/ixion-cli
-          pnpm --filter @ffcafe/ixion-cli deploy --prod --legacy .ci/ixion-cli/packages/cli
-          mkdir -p .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions
-          mkdir -p .ci/ixion-cli/lib/EXDSchema
-          cp package.json .ci/ixion-cli/package.json
-          cp .ixion-config.ci.json .ci/ixion-cli/.ixion-config.ci.json
-          cp lib/SaintCoinach/SaintCoinach/Definitions/*.json .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions/
-          cp lib/EXDSchema/*.yml .ci/ixion-cli/lib/EXDSchema/
-          rm -rf .ci/ixion-cli/packages/cli/node_modules/.pnpm/node_modules/@ffcafe/ixion-cli
-          tar -C .ci/ixion-cli -cf .ci/ixion-cli.tar .
-          mkdir -p .ci/ixion-cli-smoke
-          tar -C .ci/ixion-cli-smoke -xf .ci/ixion-cli.tar
-          node -e "import('./.ci/ixion-cli-smoke/packages/cli/node_modules/@ffcafe/ixion-storage/dist/index.js').then(() => console.log('artifact smoke test ok'))"
-          rm -rf .ci/ixion-cli-smoke
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ixion-cli
-          include-hidden-files: true
-          path: .ci/ixion-cli.tar
-
   update-xivstrings:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [update, update-exd-schema]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.update-exd-schema.outputs.sha }}
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -133,7 +131,7 @@ jobs:
 
   datamining-cn:
     runs-on: ubuntu-latest
-    needs: build
+    needs: update
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -179,7 +177,7 @@ jobs:
 
   datamining-cn-exd-schema:
     runs-on: ubuntu-latest
-    needs: build
+    needs: update
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -235,7 +233,7 @@ jobs:
 
   datamining-tc:
     runs-on: ubuntu-latest
-    needs: build
+    needs: update
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4

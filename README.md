@@ -307,3 +307,16 @@ versions together, update the lockfile, then rebuild and run the tests.
 Use their public ESM entry points, not deep imports or a mixture of ESM and CommonJS.
 Language helpers in ixion-utils re-export the same elpis definitions.
 Debug namespaces are `elpis:sqpack:*` and `elpis:sestring:*`.
+
+## GitHub Actions
+
+`build.yml` builds and packages the CLI on every push to `main` and every pull
+request. It uses read-only repository permissions and does not download game
+patches or access update-service credentials.
+
+`ci.yml` updates game data every Tuesday at 16:00 UTC+8, or on manual dispatch.
+It only runs on `main`; manual runs selecting another branch are skipped.
+The update workflow refreshes EXDSchema, calls the build workflow with the exact
+resulting commit, then runs patch updates from that build artifact. Release
+version commits still run from a main checkout. CSV exports and xivstrings
+updates run only after the patch update succeeds. Update runs are serialized.

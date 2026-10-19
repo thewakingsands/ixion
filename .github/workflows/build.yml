@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to build for the update workflow
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - uses: ilammy/setup-nasm@v1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Prepare CLI artifact
+        run: |
+          rm -rf .ci/ixion-cli
+          pnpm --filter @ffcafe/ixion-cli deploy --prod --legacy .ci/ixion-cli/packages/cli
+          mkdir -p .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions
+          mkdir -p .ci/ixion-cli/lib/EXDSchema
+          cp package.json .ci/ixion-cli/package.json
+          cp .ixion-config.ci.json .ci/ixion-cli/.ixion-config.ci.json
+          cp lib/SaintCoinach/SaintCoinach/Definitions/*.json .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions/
+          cp lib/EXDSchema/*.yml .ci/ixion-cli/lib/EXDSchema/
+          rm -rf .ci/ixion-cli/packages/cli/node_modules/.pnpm/node_modules/@ffcafe/ixion-cli
+          tar -C .ci/ixion-cli -cf .ci/ixion-cli.tar .
+          mkdir -p .ci/ixion-cli-smoke
+          tar -C .ci/ixion-cli-smoke -xf .ci/ixion-cli.tar
+          node -e "import('./.ci/ixion-cli-smoke/packages/cli/node_modules/@ffcafe/ixion-storage/dist/index.js').then(() => console.log('artifact smoke test ok'))"
+          rm -rf .ci/ixion-cli-smoke
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ixion-cli
+          include-hidden-files: true
+          path: .ci/ixion-cli.tar
+
