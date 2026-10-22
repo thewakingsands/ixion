@@ -56,6 +56,7 @@ jobs:
           mkdir -p .ci/ixion-cli-smoke
           tar -C .ci/ixion-cli-smoke -xf .ci/ixion-cli.tar
           node -e "import('./.ci/ixion-cli-smoke/packages/cli/node_modules/@ffcafe/ixion-storage/dist/index.js').then(() => console.log('artifact smoke test ok'))"
+          node .ci/ixion-cli-smoke/packages/cli/dist/index.js --help
           rm -rf .ci/ixion-cli-smoke
 
       - name: Upload artifact

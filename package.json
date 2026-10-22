@@ -1,7 +1,7 @@
 {
   "name": "@ffcafe/ixion",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": { "node": "^24.11.0 || >=26.0.0" },
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
@@ -16,7 +16,7 @@
     "@tsconfig/node22": "^22.0.5",
     "@types/node": "catalog:",
     "lefthook": "^1.13.6",
-    "tsup": "catalog:",
+    "tsdown": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:"
   },

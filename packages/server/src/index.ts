@@ -6,7 +6,7 @@ import {
 } from './providers/ffxiv-patch'
 import { ThaliakProvider } from './providers/thaliak'
 
-export { GameVersions, PatchEntry } from './interface'
+export type { GameVersions, PatchEntry } from './interface'
 
 export const servers = {
   sdo: new SDOProvider(),

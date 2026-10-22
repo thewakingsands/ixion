@@ -2,9 +2,9 @@
   "name": "config",
   "private": true,
   "exports": {
-    "./tsup": {
-      "import": "./tsup.config.mjs",
-      "types": "./tsup.config.d.ts"
+    "./tsdown": {
+      "import": "./tsdown.config.mjs",
+      "types": "./tsdown.config.d.ts"
     },
     "./tsconfig.json": "./tsconfig.json"
   }

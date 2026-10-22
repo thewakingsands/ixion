@@ -310,9 +310,13 @@ Debug namespaces are `elpis:sqpack:*` and `elpis:sestring:*`.
 
 ## GitHub Actions
 
+The TypeScript packages use tsdown; building requires Node 24.11+ (24.x) or 26+.
+Build output remains ESM at `dist/index.js`, with declarations at `dist/index.d.ts`.
+
 `build.yml` builds and packages the CLI on every push to `main` and every pull
 request. It uses read-only repository permissions and does not download game
-patches or access update-service credentials.
+patches or access update-service credentials. The extracted production artifact is
+checked by importing storage and starting the CLI with `--help`.
 
 `ci.yml` updates game data every Tuesday at 16:00 UTC+8, or on manual dispatch.
 It only runs on `main`; manual runs selecting another branch are skipped.
