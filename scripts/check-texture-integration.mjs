@@ -6,7 +6,7 @@ import { createTextureFormatter } from '../packages/cli/src/actions/asset/textur
 const require = createRequire(import.meta.url)
 const elpis = require(resolve(process.argv[2]))
 const { encodeRgba } = require('../packages/image-encoder')
-const baseline = require('../packages/tex')
+const baseline = require(resolve(process.argv[3]))
 const formatTex = createTextureFormatter(elpis.decodeTex, encodeRgba)
 let comparisons = 0
 for (const [width, height] of [[2, 2], [128, 129], [129, 128], [129, 129]]) {

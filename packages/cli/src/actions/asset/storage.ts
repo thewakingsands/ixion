@@ -30,7 +30,7 @@ import type {
   UiAssetEntry,
 } from './types'
 
-const { formatTex } = await import('@ffcafe/ixion-tex')
+const { formatTex } = await import('./texture')
 
 export interface AssetStorageOptions {
   server: string

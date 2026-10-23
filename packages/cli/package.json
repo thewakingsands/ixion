@@ -33,7 +33,6 @@
     "@ffcafe/ixion-server": "workspace:*",
     "@ffcafe/elpis-sqpack": "0.1.0",
     "@ffcafe/ixion-storage": "workspace:*",
-    "@ffcafe/ixion-tex": "workspace:*",
     "@ffcafe/ixion-utils": "workspace:*",
     "@ffcafe/ixion-zipatch": "workspace:*",
     "@octokit/auth-action": "^6.0.2",
@@ -42,6 +41,8 @@
     "commander": "^14.0.3",
     "debug": "catalog:",
     "execa": "^9.6.1",
-    "p-map": "^7.0.4"
+    "p-map": "^7.0.4",
+    "@ffcafe/elpis-texture": "0.1.0",
+    "@ffcafe/ixion-image-encoder": "workspace:*"
   }
 }

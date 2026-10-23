@@ -6,7 +6,7 @@ import {
   SqPackReader, SqPackWriter, writeExhHeader, writeExlFile, calculateIndexHash,
 } from '@ffcafe/elpis-sqpack'
 import { StorageManager } from '@ffcafe/ixion-storage'
-import { formatTex } from '@ffcafe/ixion-tex'
+import { formatTex } from '../../src/actions/asset/texture'
 import { expect, it, vi } from 'vitest'
 import { extractLocalUiAssets } from '../../src/actions/asset-local'
 import { syncUiAssetsToRemoteStorage } from '../../src/actions/asset-ui-icons'
@@ -20,7 +20,7 @@ import type { PatchFileSystem } from '../../src/utils/patch-fs'
 import type { ResolvedIndexMap } from '../../src/utils/sqpack-index'
 import { getStorageManager } from '../../src/utils/storage'
 
-vi.mock('@ffcafe/ixion-tex', () => ({ formatTex: vi.fn(async (data: Buffer) => ({ format: 'webp', data })) }))
+vi.mock('../../src/actions/asset/texture', () => ({ formatTex: vi.fn(async (data: Buffer) => ({ format: 'webp', data })) }))
 vi.mock('../../src/utils/storage', () => ({ getStorageManager: vi.fn() }))
 
 const references = { icons: [51474], maps: ['s1d1/00'] }

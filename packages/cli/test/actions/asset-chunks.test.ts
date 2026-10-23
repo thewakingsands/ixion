@@ -9,7 +9,7 @@ import { createAssetStateEntry } from '../../src/actions/asset/patch'
 import { BinaryAssetIndex } from '../../src/actions/asset/binary-index'
 import { getStorageManager } from '../../src/utils/storage'
 vi.mock('../../src/utils/storage',()=>({getStorageManager:vi.fn()}))
-vi.mock('@ffcafe/ixion-tex',()=>({formatTex:vi.fn(async(data:Buffer)=>({format:'webp',data}))}))
+vi.mock('../../src/actions/asset/texture',()=>({formatTex:vi.fn(async(data:Buffer)=>({format:'webp',data}))}))
 const path='ui/icon/000000/000001.tex'
 it('seals bounded immutable chunks, deduplicates, and never reopens a previous tail',async()=>{
   const root=await mkdtemp(join(tmpdir(),'ixion-chunks-'))

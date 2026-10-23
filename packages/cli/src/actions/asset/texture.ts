@@ -1,3 +1,6 @@
+import { decodeTex } from '@ffcafe/elpis-texture'
+import { encodeRgba } from '@ffcafe/ixion-image-encoder'
+
 export interface DecodedTexture {
   width: number
   height: number
@@ -18,9 +21,6 @@ type Encode = (
   options: Omit<FormatTexOptions, 'format'> & { format: 'webp' | 'avif' },
 ) => Promise<EncodedTexture>
 
-// Bind to elpis-texture and ixion-image-encoder once the former has a published
-// registry version. Keeping the adapter injectable permits tarball acceptance
-// without putting a temporary file dependency in the production lockfile.
 export function createTextureFormatter(decodeTex: Decode, encodeRgba: Encode) {
   return async (
     buffer: Buffer,
@@ -43,3 +43,5 @@ export function createTextureFormatter(decodeTex: Decode, encodeRgba: Encode) {
     })
   }
 }
+
+export const formatTex = createTextureFormatter(decodeTex, encodeRgba)

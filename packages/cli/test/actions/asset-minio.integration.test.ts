@@ -10,7 +10,7 @@ import { digest } from '../../src/actions/asset/catalog'
 import { PublicationLock, readPublicationLock, unlockPublication } from '../../src/actions/asset/publication'
 import { getStorageManager } from '../../src/utils/storage'
 vi.mock('../../src/utils/storage',()=>({getStorageManager:vi.fn()}))
-vi.mock('@ffcafe/ixion-tex',()=>({formatTex:vi.fn(async(data:Buffer)=>({format:'webp',data}))}))
+vi.mock('../../src/actions/asset/texture',()=>({formatTex:vi.fn(async(data:Buffer)=>({format:'webp',data}))}))
 const storageName = process.env.IXION_TEST_S3 || process.env.IXION_TEST_MINIO
 it.skipIf(!storageName)('isolated S3 Range, publication failure and resume with the configured policy',async()=>{
   const config=JSON.parse(await readFile(new URL('../../../../.ixion-config.json',import.meta.url),'utf8'))

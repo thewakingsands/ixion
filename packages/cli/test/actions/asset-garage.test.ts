@@ -12,7 +12,7 @@ import { AssetStorage } from '../../src/actions/asset/storage'
 import { getStorageManager } from '../../src/utils/storage'
 
 vi.mock('../../src/utils/storage', () => ({ getStorageManager: vi.fn() }))
-vi.mock('@ffcafe/ixion-tex', () => ({ formatTex: vi.fn(async (data: Buffer) => ({ format: 'webp', data })) }))
+vi.mock('../../src/actions/asset/texture', () => ({ formatTex: vi.fn(async (data: Buffer) => ({ format: 'webp', data })) }))
 const imagePath = 'ui/icon/000000/000001.tex'
 
 async function fixture() {
