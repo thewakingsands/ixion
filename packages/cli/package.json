@@ -42,7 +42,7 @@
     "debug": "catalog:",
     "execa": "^9.6.1",
     "p-map": "^7.0.4",
-    "@ffcafe/elpis-texture": "0.1.0",
+    "@ffcafe/elpis-texture": "0.1.1",
     "@ffcafe/ixion-image-encoder": "workspace:*"
   }
 }

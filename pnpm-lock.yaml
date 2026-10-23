@@ -71,8 +71,8 @@ importers:
         specifier: 0.1.0
         version: 0.1.0
       '@ffcafe/elpis-texture':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.1
+        version: 0.1.1
       '@ffcafe/ixion-exd':
         specifier: workspace:*
         version: link:../exd
@@ -699,8 +699,8 @@ packages:
     resolution: {integrity: sha512-ooVEfKLksQY1q5M4Ey38Ia7kziAy5cILRL2N7eZVapCbrWr7bd6h0W6D3/2uoKESNZBJdfKVsN5cHJqHKqaJqA==}
     engines: {node: '>=22'}
 
-  '@ffcafe/elpis-texture@0.1.0':
-    resolution: {integrity: sha512-pzHxsCtCSAN7e2J/k7rrRGxoCcXiPhVETTDdQZ8REILwm1WCRkLEIMwPgIhZ4uRIJxcJrS/vucZnIPSuByhLrQ==}
+  '@ffcafe/elpis-texture@0.1.1':
+    resolution: {integrity: sha512-jn/3QpMqxjwYaIA1jWmytPpyKx7MfdZTKTQq2wo8Mm1dG30segUeawyeho3k2lSagYQ4BasE7IT78roxSYgfkQ==}
     engines: {node: '>=22'}
 
   '@inquirer/ansi@2.0.5':
@@ -2682,7 +2682,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@ffcafe/elpis-texture@0.1.0': {}
+  '@ffcafe/elpis-texture@0.1.1': {}
 
   '@inquirer/ansi@2.0.5': {}
 
