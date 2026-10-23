@@ -41,6 +41,9 @@ jobs:
       - name: Build project
         run: pnpm build
 
+      - name: Test RGBA encoders
+        run: pnpm --filter @ffcafe/ixion-image-encoder test
+
       - name: Prepare CLI artifact
         run: |
           rm -rf .ci/ixion-cli

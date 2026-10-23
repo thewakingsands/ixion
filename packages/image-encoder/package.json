@@ -1,0 +1,27 @@
+{
+  "name": "@ffcafe/ixion-image-encoder",
+  "version": "0.0.1",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "binding.js",
+    "binding.d.ts",
+    "LICENSE",
+    "*.node"
+  ],
+  "napi": {
+    "binaryName": "ixion-image-encoder"
+  },
+  "scripts": {
+    "build": "napi build --platform --release --js binding.js --dts binding.d.ts -- --locked",
+    "dev": "napi build --platform --js binding.js --dts binding.d.ts -- --locked",
+    "lint": "cargo fmt --check",
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "private": true
+}
