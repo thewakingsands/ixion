@@ -11,13 +11,21 @@ catalog:
   "@biomejs/biome": 2.2.3
   "@types/debug": 4.1.12
   "@types/node": ^25.6.2
-  "@vitest/coverage-v8": ^4.1.5
+  "@vitest/coverage-v8": ^4.1.11
   debug: 4.4.1
   smart-buffer: ^4.2.0
   tsdown: 0.23.1
   tsx: ^4.21.0
   typescript: ^5.9.3
-  vitest: ^4.1.5
+  vitest: ^4.1.11
+
+# Keep transitive build/test dependencies above their security fixes.
+overrides:
+  "vite@>=7.0.0 <7.3.7": 7.3.7
+  "esbuild@>=0.27.3 <0.28.1": 0.28.2
+  "postcss@<8.5.23": 8.5.23
+  "source-map-js@<1.2.2": 1.2.2
+  "js-yaml@>=4.0.0 <4.3.2": 4.3.2
 
 onlyBuiltDependencies:
   - esbuild

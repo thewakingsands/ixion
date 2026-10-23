@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { StorageManager } from '@ffcafe/ixion-storage'
+import { S3Storage, StorageManager } from '@ffcafe/ixion-storage'
 import { expect, it, vi } from 'vitest'
 import { AssetStorage } from '../../src/actions/asset/storage'
 import { createAssetStateEntry } from '../../src/actions/asset/patch'
@@ -33,11 +33,9 @@ it.skipIf(!storageName)('isolated S3 Range, publication failure and resume with 
   }
   try {
     await remote.writeFile(server,'ui','probe',Buffer.from('0123456789'))
-    // Exercise the actual server's byte-range behavior using the adapter's SDK client.
-    const client=Reflect.get(remote,'client')
-    const stream=await client.getPartialObject(source.config.bucketName,remote.getRootPath('ui',server)+'/probe',2,4)
-    const parts:Buffer[]=[];for await(const b of stream)parts.push(b)
-    expect(Buffer.concat(parts).toString()).toBe('2345')
+    // Exercise the actual server's byte-range behavior through the adapter.
+    if (!(remote instanceof S3Storage)) throw new Error('S3 storage required')
+    expect((await remote.readFileRange(server,'ui','probe',2,4)).toString()).toBe('2345')
     if(process.env.IXION_TEST_MINIO_EXPECT_UNSUPPORTED) {
       await expect(remote.createFile(server,'ui','guarded',Buffer.from('x'))).rejects.toThrow('does not enforce')
       expect(await remote.readFileStrict(server,'ui','guarded')).toBeNull()

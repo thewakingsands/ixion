@@ -60,6 +60,25 @@ Stores version files on the local filesystem with direct file access.
 ### S3Storage (MinioStorage alias)
 
 Uses a shared S3 implementation for Garage, MinIO and other compatible services.
+The implementation uses AWS SDK v3 (`@aws-sdk/client-s3` and `@aws-sdk/lib-storage`).
+Existing endpoint host, port, TLS, credentials, prefixes and `minio` aliases remain
+compatible. Set `region` to your server's configured S3 region (for Garage this
+is often `garage`); the fallback remains `us-east-1`. `forcePathStyle` defaults
+to `true` for custom endpoints and can be set to `false` for DNS-style buckets.
+
+SDK checksums remain enabled by default (`WHEN_SUPPORTED`). If isolated testing
+shows that your backend version cannot handle the SDK's optional checksums, set
+`requestChecksumCalculation` and/or `responseChecksumValidation` to
+`WHEN_REQUIRED` in that storage's config. This reduces optional integrity checks;
+it does not disable TLS or request signing. Do not assume compatibility from a
+Garage major version alone. Verify single and multipart uploads, full and Range
+downloads, pagination, Content-Type and publication recovery with your deployment.
+See [AWS checksum settings](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html)
+and [Garage client configuration](https://garagehq.deuxfleurs.fr/documentation/connect/).
+
+Uploads use managed multipart transfer with automatic abort on failure; conditional
+creation stays a single PUT. Downloads fully consume the response stream. The
+`readFileRange` method reads a byte range without exposing the SDK client.
 Use `type: 's3'`; `type: 'minio'` remains an alias. Version directories are
 automatically compressed into ZIP files for transfer.
 

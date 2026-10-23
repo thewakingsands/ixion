@@ -1,11 +1,24 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
+import { Readable } from 'node:stream'
+import {
+  type BucketLocationConstraint,
+  CreateBucketCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  HeadObjectCommand,
+  ListBucketsCommand,
+  PutObjectCommand,
+  paginateListObjectsV2,
+  S3Client,
+} from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 import {
   compressDirectoryToBuffer,
   decompressToDirectory,
   sortVersions,
 } from '@ffcafe/ixion-utils'
-import { Client } from 'minio'
 import {
   AbstractStorage,
   type StorageConfig,
@@ -21,6 +34,9 @@ export interface S3StorageConfig {
   secretKey: string
   bucketName: string
   region?: string
+  forcePathStyle?: boolean
+  requestChecksumCalculation?: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
+  responseChecksumValidation?: 'WHEN_SUPPORTED' | 'WHEN_REQUIRED'
   prefix?: string
   paths?: StoragePathMap
   publicationMode?: 'conditional' | 'cooperative'
@@ -84,16 +100,13 @@ export class S3Storage extends AbstractStorage {
   ): Promise<Buffer | null> {
     try {
       return await streamToBuffer(
-        await this.client.getObject(
+        await this.getObject(
           this.bucketName,
           this.assetKey(server, pathKey, relativePath),
         ),
       )
     } catch (e) {
-      if (
-        ['NoSuchKey', 'NotFound'].includes((e as { code?: string }).code ?? '')
-      )
-        return null
+      if (isMissing(e)) return null
       throw e
     }
   }
@@ -129,19 +142,20 @@ export class S3Storage extends AbstractStorage {
   ): Promise<boolean> {
     try {
       // Single PUT: conditional headers must not disappear in multipart completion.
-      await this.client.makeRequestAsyncOmit(
-        {
-          method: 'PUT',
-          bucketName: this.bucketName,
-          objectName: this.assetKey(server, pathKey, relativePath),
-          headers: { 'If-None-Match': '*', 'Content-Type': contentType },
-        },
-        content,
-        [200],
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: this.assetKey(server, pathKey, relativePath),
+          IfNoneMatch: '*',
+          ContentType: contentType,
+          Body: content,
+          ContentLength: content.length,
+        }),
       )
       return true
     } catch (e) {
-      if ((e as { code?: string }).code === 'PreconditionFailed') return false
+      if (errorName(e) === 'PreconditionFailed' || statusCode(e) === 412)
+        return false
       throw e
     }
   }
@@ -151,12 +165,12 @@ export class S3Storage extends AbstractStorage {
     pathKey: string,
     relativePath: string,
   ): Promise<void> {
-    await this.client.removeObject(
+    await this.removeObject(
       this.bucketName,
       this.assetKey(server, pathKey, relativePath),
     )
   }
-  private client: Client
+  private client: S3Client
   private bucketName: string
   private prefix: string
   private paths?: StoragePathMap
@@ -170,14 +184,102 @@ export class S3Storage extends AbstractStorage {
     this.paths = s3Config.paths
     this.versionsPath = trimStorageSegment(s3Config.paths?.versions || '')
 
-    this.client = new Client({
-      endPoint: s3Config.endPoint,
-      port: s3Config.port,
-      useSSL: s3Config.useSSL ?? true,
-      accessKey: s3Config.accessKey,
-      secretKey: s3Config.secretKey,
-      region: s3Config.region,
+    this.client = new S3Client({
+      endpoint: `${s3Config.useSSL === false ? 'http' : 'https'}://${s3Config.endPoint}${s3Config.port === undefined ? '' : `:${s3Config.port}`}`,
+      credentials: {
+        accessKeyId: s3Config.accessKey,
+        secretAccessKey: s3Config.secretKey,
+      },
+      region: s3Config.region ?? 'us-east-1',
+      forcePathStyle: s3Config.forcePathStyle ?? true,
+      requestChecksumCalculation:
+        s3Config.requestChecksumCalculation ?? 'WHEN_SUPPORTED',
+      responseChecksumValidation:
+        s3Config.responseChecksumValidation ?? 'WHEN_SUPPORTED',
     })
+  }
+
+  private async getObject(
+    bucket: string,
+    key: string,
+    range?: string,
+  ): Promise<Readable> {
+    const { Body } = await this.client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key, Range: range }),
+    )
+    if (!(Body instanceof Readable))
+      throw new Error('S3 returned no readable object body')
+    return Body
+  }
+
+  /** Read an inclusive HTTP byte range without exposing the SDK client. */
+  async readFileRange(
+    server: string,
+    pathKey: string,
+    relativePath: string,
+    offset: number,
+    length: number,
+  ): Promise<Buffer> {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(length) ||
+      length <= 0 ||
+      !Number.isSafeInteger(offset + length - 1)
+    )
+      throw new Error('Invalid S3 byte range')
+    return streamToBuffer(
+      await this.getObject(
+        this.bucketName,
+        this.assetKey(server, pathKey, relativePath),
+        `bytes=${offset}-${offset + length - 1}`,
+      ),
+    )
+  }
+
+  private async statObject(bucket: string, key: string) {
+    return this.client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+  }
+
+  private async putObject(
+    bucket: string,
+    key: string,
+    body: Buffer | string,
+    _size: number,
+    metadata?: Record<string, string>,
+  ) {
+    const content = typeof body === 'string' ? Buffer.from(body, 'utf8') : body
+    // Upload selects single PUT or multipart and aborts failed multipart uploads.
+    await new Upload({
+      client: this.client,
+      params: {
+        Bucket: bucket,
+        Key: key,
+        Body: content,
+        ContentLength: content.length,
+        ContentType: metadata?.['Content-Type'],
+      },
+      leavePartsOnError: false,
+    }).done()
+  }
+
+  private async removeObject(bucket: string, key: string) {
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: bucket, Key: key }),
+    )
+  }
+
+  private async *listObjects(
+    bucket: string,
+    prefix: string,
+    _recursive: boolean,
+  ) {
+    for await (const page of paginateListObjectsV2(
+      { client: this.client },
+      { Bucket: bucket, Prefix: prefix },
+    )) {
+      for (const object of page.Contents ?? []) yield { name: object.Key }
+    }
   }
 
   /**
@@ -205,16 +307,16 @@ export class S3Storage extends AbstractStorage {
 
       // Check if the object exists
       try {
-        await this.client.statObject(this.bucketName, objectName)
+        await this.statObject(this.bucketName, objectName)
       } catch (error: any) {
-        if (error.code === 'NotFound') {
+        if (isMissing(error)) {
           return null
         }
         throw error
       }
 
       // Get the object
-      const stream = await this.client.getObject(this.bucketName, objectName)
+      const stream = await this.getObject(this.bucketName, objectName)
 
       // Convert stream to string
       const chunks: Buffer[] = []
@@ -245,7 +347,7 @@ export class S3Storage extends AbstractStorage {
       const objectName = this.getObjectName(server, 'current.json')
       const content = JSON.stringify(versionData, null, 2)
 
-      await this.client.putObject(
+      await this.putObject(
         this.bucketName,
         objectName,
         content,
@@ -273,15 +375,15 @@ export class S3Storage extends AbstractStorage {
         .join('/')
 
       try {
-        await this.client.statObject(this.bucketName, objectName)
+        await this.statObject(this.bucketName, objectName)
       } catch (error: any) {
-        if (error.code === 'NotFound') {
+        if (isMissing(error)) {
           return null
         }
         throw error
       }
 
-      const stream = await this.client.getObject(this.bucketName, objectName)
+      const stream = await this.getObject(this.bucketName, objectName)
       return await streamToBuffer(stream)
     } catch (error) {
       console.warn(
@@ -309,7 +411,7 @@ export class S3Storage extends AbstractStorage {
       const body =
         typeof content === 'string' ? Buffer.from(content, 'utf-8') : content
 
-      await this.client.putObject(
+      await this.putObject(
         this.bucketName,
         objectName,
         body,
@@ -334,11 +436,7 @@ export class S3Storage extends AbstractStorage {
         .filter(Boolean)
         .join('/')
       const files: string[] = []
-      const objects = this.client.listObjects(
-        this.bucketName,
-        searchPrefix,
-        true,
-      )
+      const objects = this.listObjects(this.bucketName, searchPrefix, true)
 
       for await (const obj of objects) {
         if (!obj.name || obj.name.endsWith('/')) {
@@ -364,10 +462,10 @@ export class S3Storage extends AbstractStorage {
 
       // Check if the zip file exists
       try {
-        await this.client.statObject(this.bucketName, objectName)
+        await this.statObject(this.bucketName, objectName)
         return true
       } catch (error: any) {
-        if (error.code === 'NotFound') {
+        if (isMissing(error)) {
           return false
         }
         throw error
@@ -386,11 +484,7 @@ export class S3Storage extends AbstractStorage {
       const versions = new Set<string>()
       const searchPrefix = this.getServerPrefix(server)
 
-      const objects = this.client.listObjects(
-        this.bucketName,
-        searchPrefix,
-        true,
-      )
+      const objects = this.listObjects(this.bucketName, searchPrefix, true)
 
       for await (const obj of objects) {
         if (obj.name) {
@@ -422,7 +516,7 @@ export class S3Storage extends AbstractStorage {
       // Download the zip file
       const objectName = this.getObjectName(server, `${version}.zip`)
 
-      const stream = await this.client.getObject(this.bucketName, objectName)
+      const stream = await this.getObject(this.bucketName, objectName)
 
       // Convert stream to buffer
       const chunks: Buffer[] = []
@@ -450,7 +544,7 @@ export class S3Storage extends AbstractStorage {
       // Upload the zip file
       const objectName = this.getObjectName(server, `${version}.zip`)
 
-      await this.client.putObject(
+      await this.putObject(
         this.bucketName,
         objectName,
         zipBuffer,
@@ -469,7 +563,7 @@ export class S3Storage extends AbstractStorage {
       const objectName = this.getObjectName(server, `${version}.zip`)
 
       // Delete the zip file
-      await this.client.removeObject(this.bucketName, objectName)
+      await this.removeObject(this.bucketName, objectName)
     } catch (error) {
       throw new Error(`Failed to delete version ${version}: ${error}`)
     }
@@ -478,14 +572,34 @@ export class S3Storage extends AbstractStorage {
   async healthCheck(): Promise<boolean> {
     try {
       // Try to list buckets to check connectivity
-      await this.client.listBuckets()
+      await this.client.send(new ListBucketsCommand({}))
 
       // Try to check if our bucket exists
-      const bucketExists = await this.client.bucketExists(this.bucketName)
+      let bucketExists = true
+      try {
+        await this.client.send(
+          new HeadBucketCommand({ Bucket: this.bucketName }),
+        )
+      } catch (error) {
+        if (!isMissing(error)) throw error
+        bucketExists = false
+      }
 
       if (!bucketExists) {
         // Try to create the bucket if it doesn't exist
-        await this.client.makeBucket(this.bucketName)
+        const region = await this.client.config.region()
+        await this.client.send(
+          new CreateBucketCommand({
+            Bucket: this.bucketName,
+            ...(region === 'us-east-1'
+              ? {}
+              : {
+                  CreateBucketConfiguration: {
+                    LocationConstraint: region as BucketLocationConstraint,
+                  },
+                }),
+          }),
+        )
       }
 
       return true
@@ -518,4 +632,22 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   }
   return Buffer.concat(chunks)
+}
+
+function errorName(error: unknown): string | undefined {
+  const e = error as { name?: string; code?: string }
+  return e?.name === 'Error' ? e.code : (e?.name ?? e?.code)
+}
+
+function statusCode(error: unknown): number | undefined {
+  return (error as { $metadata?: { httpStatusCode?: number } })?.$metadata
+    ?.httpStatusCode
+}
+
+function isMissing(error: unknown): boolean {
+  return (
+    ['NoSuchKey', 'NotFound', 'NoSuchBucket'].includes(
+      errorName(error) ?? '',
+    ) || statusCode(error) === 404
+  )
 }
