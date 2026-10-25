@@ -23,7 +23,15 @@ export abstract class AbstractPatchProvider {
   /**
    * Request patch list from the provider
    */
-  abstract request(versions: GameVersions): Promise<PatchEntry[]>
+  abstract request(
+    versions: GameVersions,
+    signal?: AbortSignal,
+  ): Promise<PatchEntry[]>
+
+  abstract latestVersion(
+    versions?: GameVersions,
+    signal?: AbortSignal,
+  ): Promise<string>
 
   /**
    * Check if the provider is available

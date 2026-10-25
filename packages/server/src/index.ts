@@ -21,3 +21,5 @@ export const servers = {
   actozThaliak: new ThaliakProvider('de199059', [Language.Korean]),
   userjoy: new UserjoyProvider(),
 }
+
+export { isGameVersion, ObservationError } from './observation'

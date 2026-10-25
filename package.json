@@ -1,7 +1,9 @@
 {
   "name": "@ffcafe/ixion",
   "type": "module",
-  "engines": { "node": "^24.11.0 || >=26.0.0" },
+  "engines": {
+    "node": "^24.11.0 || >=26.0.0"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
@@ -9,7 +11,8 @@
     "lint": "biome check --write packages",
     "postinstall": "lefthook install || true",
     "test": "pnpm -r test",
-    "x": "tsx packages/cli/src/index.ts"
+    "x": "tsx packages/cli/src/index.ts",
+    "status": "tsx packages/cli/src/status.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

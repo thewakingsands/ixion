@@ -43,6 +43,7 @@
     "execa": "^9.6.1",
     "p-map": "^7.0.4",
     "@ffcafe/elpis-texture": "0.1.1",
-    "@ffcafe/ixion-image-encoder": "workspace:*"
+    "@ffcafe/ixion-image-encoder": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1156.0"
   }
 }

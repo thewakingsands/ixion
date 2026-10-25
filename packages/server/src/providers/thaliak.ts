@@ -1,6 +1,7 @@
 import type { Language } from '@ffcafe/ixion-utils'
 import $debug from 'debug'
 import type { GameVersions, PatchEntry } from '../interface'
+import { checkHttp, isGameVersion, ObservationError } from '../observation'
 import { AbstractPatchProvider } from './abstract'
 
 const debug = $debug('ixion:providers:thaliak')
@@ -220,28 +221,15 @@ export class ThaliakProvider extends AbstractPatchProvider {
     return result
   }
 
-  async request(versions: GameVersions): Promise<PatchEntry[]> {
+  async request(
+    versions: GameVersions,
+    signal?: AbortSignal,
+  ): Promise<PatchEntry[]> {
     const repository = this.repository
     debug('requesting repository %s from thaliak', repository)
 
     try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'FFXIV PATCH CLIENT',
-        },
-        body: JSON.stringify({
-          query: graphqlQuery,
-          variables: { repository },
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      const result = (await response.json()) as ThaliakResponse
+      const result = await this.query(graphqlQuery, signal)
 
       if (result.data?.repository?.versions) {
         // Build dependency tree and get ordered patches
@@ -259,6 +247,50 @@ export class ThaliakProvider extends AbstractPatchProvider {
       debug('thaliak request failed: %s', error)
       throw new Error(`Failed to request patches from Thaliak: ${error}`)
     }
+  }
+
+  private async query(
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<ThaliakResponse> {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'FFXIV PATCH CLIENT',
+      },
+      body: JSON.stringify({
+        query,
+        variables: { repository: this.repository },
+      }),
+      signal,
+    })
+    checkHttp(response)
+    let result: ThaliakResponse & { errors?: unknown }
+    try {
+      result = (await response.json()) as typeof result
+    } catch (error) {
+      if (signal?.aborted || !(error instanceof SyntaxError)) throw error
+      throw new ObservationError('invalid_response')
+    }
+    if (!result || result.errors || !result.data?.repository)
+      throw new ObservationError('invalid_response')
+    return result
+  }
+
+  async latestVersion(
+    _versions?: GameVersions,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const result = await this.query(
+      `query LatestVersion($repository: String!) {
+      repository(slug: $repository) { latestVersion { versionString } }
+    }`,
+      signal,
+    )
+    const version = result.data.repository.latestVersion?.versionString
+    if (!isGameVersion(version)) throw new ObservationError('invalid_response')
+    return version
   }
 
   async healthCheck(): Promise<boolean> {

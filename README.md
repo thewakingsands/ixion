@@ -2,6 +2,10 @@
 
 Ixion contains a CLI and several packages working with FFXIV patches and data files.
 
+## Client version status
+
+See [Client version observations](docs/status.md) for the standalone status command, public JSON format and scheduled S3 publication.
+
 ## Usage
 
 ```bash
