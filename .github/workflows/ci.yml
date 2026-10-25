@@ -43,10 +43,10 @@ jobs:
       - name: Install without native build scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build observation dependencies
-        run: pnpm --filter '@ffcafe/ixion-server...' build
+        run: pnpm --filter '@ffcafe/ixion-cli^...' --filter '!@ffcafe/ixion-image-encoder' build
       - name: Observe and commit versions
         id: observe
-        run: pnpm status --commit
+        run: pnpm x ci observe --commit
 
   update-exd-schema:
     needs: observe

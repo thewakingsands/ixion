@@ -1,6 +1,5 @@
 import {
   type GameVersions,
-  isGameVersion,
   ObservationError,
   servers,
 } from '@ffcafe/ixion-server'
@@ -19,40 +18,12 @@ export interface Observation {
   errors: Partial<Record<ServerName, StatusError>>
   updateRequired: boolean
 }
-export const maxStatusBytes = 1024 * 1024
-const object = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === 'object' && !Array.isArray(value)
-
-export function parseBaselines(text: string): Record<string, unknown> {
-  if (Buffer.byteLength(text) > maxStatusBytes)
-    throw new Error('Input exceeds 1 MiB')
-  const value: unknown = JSON.parse(text)
-  if (!object(value)) throw new Error('Invalid versions file')
-  return value
-}
-
-export function parseStatus(text: string): ObservedVersions {
-  const value = parseBaselines(text)
-  if (
-    Object.entries(value).some(
-      ([key, version]) =>
-        !serversToCheck.includes(key as ServerName) || !isGameVersion(version),
-    )
-  )
-    throw new Error('Invalid observed versions file')
-  return Object.fromEntries(
-    serversToCheck
-      .filter((key) => key in value)
-      .map((key) => [key, value[key]]),
-  )
-}
-
 interface Provider {
   latestVersion(versions?: GameVersions, signal?: AbortSignal): Promise<string>
 }
 interface Options {
   previous?: ObservedVersions
-  baselines: Record<string, unknown>
+  baselines: ObservedVersions
   providers?: Record<ServerName, Provider>
   timeoutMs?: number
   sleep?: (ms: number) => Promise<void>
@@ -73,12 +44,9 @@ export async function observeStatus({
         version: previous[server],
       })
       const base = baselines[server]
-      if (
-        server !== 'squareEnix' &&
-        (!isGameVersion(base) || base === '2012.01.01.0000.0000')
-      )
+      if (server !== 'squareEnix' && (!base || base === '2012.01.01.0000.0000'))
         return failed('baseline_unavailable')
-      const versions = isGameVersion(base)
+      const versions = base
         ? { boot: bootVersion, ffxiv: base, expansions: {} }
         : undefined
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -88,8 +56,6 @@ export async function observeStatus({
             versions,
             signal,
           )
-          if (!isGameVersion(version))
-            throw new ObservationError('invalid_response')
           return { server, version, error: null }
         } catch (error) {
           const code = signal.aborted

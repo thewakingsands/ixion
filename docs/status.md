@@ -8,15 +8,15 @@ Use Node 24.11 or later and the repository's pnpm version:
 
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
-pnpm --filter '@ffcafe/ixion-server...' build
-pnpm status
+pnpm --filter '@ffcafe/ixion-cli^...' --filter '!@ffcafe/ixion-image-encoder' build
+pnpm x ci observe
 ```
 
-The standalone entry needs only the server package and its dependencies built. The CLI build also provides `node packages/cli/dist/status.js` with the same arguments.
+Observation is a subcommand of the existing CLI. After building the CLI, use `node packages/cli/dist/index.js ci observe` with the same options. Source execution needs the CLI's JavaScript workspace dependencies built, but does not load the native image encoder.
 
-`--baselines` defaults to `.ci/versions.json`; `--output` defaults to `.ci/versions-observed.json`. The output file is read as the previous observation, then replaced only when versions change. A missing output file starts empty. Invalid JSON, unknown observed keys, invalid observed versions and inputs over 1 MiB fail before querying.
+The command reads `.ci/versions.json` and `.ci/versions-observed.json`, then writes the latter only when versions change. Missing files start empty; normal JSON parsing errors fail the command. These repository-owned maps are read directly, without a second schema or size-validation layer.
 
-Patch providers use the released version and existing boot identifier. Missing or invalid regional baselines, including the initialization placeholder, produce `baseline_unavailable`. Thaliak can query without a baseline. Explicitly named missing baseline files fail; an absent default baseline is treated as empty.
+Patch providers use the released version and existing boot identifier. A missing baseline or initialization placeholder produces `baseline_unavailable`; Thaliak can query without one. Upstream providers validate their own responses.
 
 Requests time out after 30 seconds and retry transient failures once. Failed regions retain their previous observed versions; first-time failures are omitted. Errors appear in the command log only. All failures leave an existing file unchanged and do not create a first file.
 
@@ -30,7 +30,7 @@ Consumers read `https://raw.githubusercontent.com/thewakingsands/ixion/main/.ci/
 
 `.github/workflows/ci.yml` runs on Tuesdays at 16:00 UTC+8 and supports manual dispatch, including Thursday hotfix checks. GitHub may delay scheduled runs. The existing concurrency group serializes observation and release together.
 
-The observation job builds only server dependencies and runs `pnpm status --commit`. This commits and pushes only `.ci/versions-observed.json`, then writes `sha` and `update_required` to GitHub outputs. It needs contents: write and checkout's Git credentials; no additional storage credentials are required.
+The observation job builds the JavaScript workspace dependencies and runs `pnpm x ci observe --commit`. This commits and pushes only `.ci/versions-observed.json`, then writes `sha` and `update_required` to GitHub outputs. It needs contents: write and checkout's Git credentials; no additional storage credentials are required.
 
 A successful observation differing from the released-version record triggers EXDSchema update, full build and release. Comparing with released versions allows the same observed version to retry after a download failure. Failed regions never trigger updates using stale observations. `force_release` explicitly runs the existing update path; `allow_missing_remote_version` keeps its existing meaning.
 

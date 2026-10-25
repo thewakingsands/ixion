@@ -11,8 +11,7 @@
     "lint": "biome check --write packages",
     "postinstall": "lefthook install || true",
     "test": "pnpm -r test",
-    "x": "tsx packages/cli/src/index.ts",
-    "status": "tsx packages/cli/src/status.ts"
+    "x": "tsx packages/cli/src/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

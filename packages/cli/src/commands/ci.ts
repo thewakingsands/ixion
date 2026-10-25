@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
 import { ciInitCommand, ciUpdateCommand } from '../actions/ci'
+import { ciObserveCommand } from '../actions/ci/observe'
 
 export const registerCiCommand = (program: Command) => {
   const ciCmd = program.command('ci').description('Run CI actions')
@@ -31,6 +32,14 @@ export const registerCiCommand = (program: Command) => {
         })
       },
     )
+
+  ciCmd
+    .command('observe')
+    .description('Observe upstream versions before updating game data')
+    .option('--commit', 'Commit and push observations; emit GitHub outputs')
+    .action(async (options: { commit?: boolean }) => {
+      await ciObserveCommand(options)
+    })
 
   return ciCmd
 }

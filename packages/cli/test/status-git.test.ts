@@ -6,7 +6,7 @@ import { servers } from '@ffcafe/ixion-server'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { serversToCheck } from '../src/actions/ci/constants'
 import { commitAndPush } from '../src/actions/ci/github'
-import { runStatus } from '../src/status'
+import { ciObserveCommand } from '../src/actions/ci/observe'
 
 let root: string, repo: string, remote: string, outputs: string
 const version = '2026.01.01.0000.0000'
@@ -43,7 +43,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await rm(root, { recursive: true, force: true })
 })
-const run = () => runStatus(['--commit'], { GITHUB_OUTPUT: outputs }, repo)
+const run = () => ciObserveCommand({ commit: true }, { GITHUB_OUTPUT: outputs }, repo)
 
 it('pushes only observed versions, skips unchanged commits and retains observations in later release commits', async () => {
   await writeFile(join(repo, 'other.txt'), 'unrelated staged work')

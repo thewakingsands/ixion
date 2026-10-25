@@ -30,8 +30,6 @@ import type {
   UiAssetEntry,
 } from './types'
 
-const { formatTex } = await import('./texture')
-
 export interface AssetStorageOptions {
   server: string
   storage?: string
@@ -223,6 +221,7 @@ export class AssetStorage {
     const existing = db.object(sha256)
     if (existing)
       return { format: existing.format as EncodedAssetFormat, persisted: false }
+    const { formatTex } = await import('./texture')
     const encoded = await formatTex(nextData, { format: 'auto' })
     const format = encoded.format as EncodedAssetFormat
     // Encoding is parallel; synchronous allocation cannot interleave append offsets.

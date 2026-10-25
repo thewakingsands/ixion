@@ -3,8 +3,6 @@ import { describe, expect, it, type Mock, vi } from 'vitest'
 import { serversToCheck } from '../src/actions/ci/constants'
 import {
   observeStatus,
-  parseBaselines,
-  parseStatus,
   type ServerName,
 } from '../src/actions/status'
 
@@ -41,9 +39,6 @@ describe('version observation', () => {
     expect(result.versions).toEqual({ ...baselines, actoz: next })
     expect(result.errors).toEqual({ sdo: 'invalid_response' })
     expect(result.updateRequired).toBe(true)
-    expect(parseStatus(JSON.stringify(result.versions))).toEqual(
-      result.versions,
-    )
   })
   it('omits first failures and does not invent observations from release records', async () => {
     const p = providers()
@@ -93,7 +88,7 @@ describe('version observation', () => {
   it('requires real baselines only for patch providers', async () => {
     const p = providers()
     await observeStatus({
-      baselines: { sdo: '2012.01.01.0000.0000', actoz: 'bad' },
+      baselines: { sdo: '2012.01.01.0000.0000' },
       providers: p,
     })
     expect(p.sdo.latestVersion).not.toHaveBeenCalled()
@@ -135,36 +130,5 @@ describe('version observation', () => {
     expect(result.errors).toEqual({ sdo: 'timeout' })
     expect(p.sdo.latestVersion).toHaveBeenCalledTimes(2)
     expect(Object.keys(result.versions)).toHaveLength(3)
-  })
-  it('rejects malformed provider output', async () => {
-    const p = providers()
-    p.sdo.latestVersion.mockResolvedValue('not a version')
-    const result = await observeStatus({ baselines, providers: p })
-    expect(result.errors.sdo).toBe('invalid_response')
-    expect(result.versions.sdo).toBeUndefined()
-  })
-})
-
-describe('input validation', () => {
-  it.each([
-    '[]',
-    'null',
-    '{',
-    '{"unknown":"2026.01.01.0000.0000"}',
-    '{"sdo":null}',
-    '{"sdo":"bad"}',
-    '{"schemaVersion":1,"regions":[]}',
-  ])('rejects corrupt observation %s', (text) => {
-    expect(() => parseStatus(text)).toThrow()
-  })
-  it('limits size, validates baseline shape and orders keys', () => {
-    expect(() => parseStatus('x'.repeat(1024 * 1024 + 1))).toThrow('1 MiB')
-    expect(() => parseBaselines('{')).toThrow()
-    expect(() => parseBaselines('[]')).toThrow()
-    expect(
-      Object.keys(
-        parseStatus(JSON.stringify({ userjoy: version, sdo: version })),
-      ),
-    ).toEqual(['sdo', 'userjoy'])
   })
 })
