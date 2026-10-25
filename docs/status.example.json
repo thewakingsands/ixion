@@ -1,41 +1,6 @@
 {
-  "schemaVersion": 1,
-  "regions": [
-    {
-      "server": "sdo",
-      "region": "cn",
-      "source": "sdo",
-      "version": "2026.01.01.0000.0000",
-      "observedAt": "2026-01-01T00:00:00.000Z",
-      "attemptedAt": "2026-01-01T00:00:00.000Z",
-      "error": null
-    },
-    {
-      "server": "squareEnix",
-      "region": "global",
-      "source": "thaliak",
-      "version": null,
-      "observedAt": null,
-      "attemptedAt": "2026-01-01T00:00:00.000Z",
-      "error": "upstream"
-    },
-    {
-      "server": "actoz",
-      "region": "kr",
-      "source": "actoz",
-      "version": null,
-      "observedAt": null,
-      "attemptedAt": "2026-01-01T00:00:00.000Z",
-      "error": "upstream"
-    },
-    {
-      "server": "userjoy",
-      "region": "tw",
-      "source": "userjoy",
-      "version": "2026.01.01.0000.0000",
-      "observedAt": "2026-01-01T00:00:00.000Z",
-      "attemptedAt": "2026-01-01T00:00:00.000Z",
-      "error": "upstream"
-    }
-  ]
+  "sdo": "2026.10.06.0000.0000",
+  "squareEnix": "2026.10.16.0000.0000",
+  "actoz": "2026.10.06.0000.0000",
+  "userjoy": "2026.09.14.0000.0000"
 }

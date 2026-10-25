@@ -4,100 +4,121 @@ import {
   readdir,
   readFile,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { servers } from '@ffcafe/ixion-server'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { parseStatus, regions } from '../src/actions/status'
+import { serversToCheck } from '../src/actions/ci/constants'
+import { parseStatus } from '../src/actions/status'
 import { runStatus } from '../src/status'
 
 let directory: string
 const version = '2026.01.01.0000.0000'
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'ixion-status-'))
+  await mkdir(join(directory, '.ci'))
   await writeFile(
-    join(directory, 'baselines.json'),
-    JSON.stringify(Object.fromEntries(regions.map((r) => [r.server, version]))),
+    join(directory, '.ci/versions.json'),
+    JSON.stringify(Object.fromEntries(serversToCheck.map((s) => [s, version]))),
   )
   vi.spyOn(console, 'log').mockImplementation(() => {})
-  for (const r of regions)
-    vi.spyOn(servers[r.server], 'latestVersion').mockResolvedValue(version)
+  for (const s of serversToCheck)
+    vi.spyOn(servers[s], 'latestVersion').mockResolvedValue(version)
 })
 afterEach(async () => {
   vi.restoreAllMocks()
   await rm(directory, { recursive: true, force: true })
 })
-const args = () => [
-  '--baselines',
-  join(directory, 'baselines.json'),
-  '--output',
-  join(directory, 'status.json'),
-]
+const run = (args: string[] = []) => runStatus(args, {}, directory)
+const output = () => join(directory, '.ci/versions-observed.json')
 
-it('runs the standalone command, refreshes previous data, and leaves no temporary files', async () => {
-  await runStatus(args())
-  const first = parseStatus(
-    await readFile(join(directory, 'status.json'), 'utf8'),
-  )
+it('writes defaults, preserves failed regions, and leaves no temporary files', async () => {
+  await run()
+  const first = parseStatus(await readFile(output(), 'utf8'))
   vi.mocked(servers.sdo.latestVersion).mockRejectedValue(
     new Error('private upstream detail'),
   )
-  await runStatus([...args(), '--previous', join(directory, 'status.json')])
-  const second = parseStatus(
-    await readFile(join(directory, 'status.json'), 'utf8'),
+  const result = await run()
+  expect(parseStatus(await readFile(output(), 'utf8'))).toEqual(first)
+  expect(result?.errors).toEqual({ sdo: 'upstream' })
+  expect(JSON.stringify(vi.mocked(console.log).mock.calls)).not.toContain(
+    'private',
   )
-  expect(second.regions[0].observedAt).toBe(first.regions[0].observedAt)
-  expect(second.regions[0].error).toBe('upstream')
-  expect(JSON.stringify(second)).not.toContain('private')
-  expect(await readdir(directory)).toEqual(['baselines.json', 'status.json'])
+  expect(await readdir(join(directory, '.ci'))).toEqual([
+    'versions-observed.json',
+    'versions.json',
+  ])
 })
-it('rejects missing or corrupt previous files without overwriting output', async () => {
-  await writeFile(join(directory, 'status.json'), 'original')
-  await expect(
-    runStatus([...args(), '--previous', join(directory, 'missing')]),
-  ).rejects.toThrow()
-  await writeFile(join(directory, 'previous.json'), '{}')
-  await expect(
-    runStatus([...args(), '--previous', join(directory, 'previous.json')]),
-  ).rejects.toThrow()
-  expect(await readFile(join(directory, 'status.json'), 'utf8')).toBe(
-    'original',
+it('does not rewrite an unchanged version map', async () => {
+  await run()
+  const before = await stat(output())
+  await run()
+  expect((await stat(output())).mtimeMs).toBe(before.mtimeMs)
+})
+it('all failures leave the old file byte-for-byte unchanged, and create no first file', async () => {
+  for (const s of serversToCheck)
+    vi.mocked(servers[s].latestVersion).mockRejectedValue(
+      new Error('unavailable'),
+    )
+  expect((await run())?.updateRequired).toBe(false)
+  await expect(stat(output())).rejects.toMatchObject({ code: 'ENOENT' })
+  const old = '{ "sdo" : "2026.01.01.0000.0000" }'
+  await writeFile(output(), old)
+  await run()
+  expect(await readFile(output(), 'utf8')).toBe(old)
+})
+it.each(['{broken', '{"sdo":"bad"}', '{"schemaVersion":1}', '[]'])(
+  'rejects corrupt observed file %s before querying or overwriting',
+  async (text) => {
+    await writeFile(output(), text)
+    await expect(run()).rejects.toThrow()
+    expect(await readFile(output(), 'utf8')).toBe(text)
+    expect(servers.sdo.latestVersion).not.toHaveBeenCalled()
+  },
+)
+it('rejects corrupt baseline JSON and oversize input before querying', async () => {
+  await writeFile(join(directory, '.ci/versions.json'), '{broken')
+  await expect(run()).rejects.toThrow()
+  await writeFile(
+    join(directory, '.ci/versions.json'),
+    ' '.repeat(1024 * 1024 + 1),
   )
-  expect(servers.sdo.latestVersion).not.toHaveBeenCalled()
+  await expect(run()).rejects.toThrow('1 MiB')
+  expect(servers.squareEnix.latestVersion).not.toHaveBeenCalled()
 })
-it('rejects incompatible arguments before querying', async () => {
-  await expect(runStatus([...args(), '--publish'])).rejects.toThrow('Choose')
-  await expect(runStatus([])).rejects.toThrow('Choose')
-  await runStatus(['--help'])
+it('rejects old publication flags and custom Git output paths', async () => {
+  await expect(run(['--publish'])).rejects.toThrow()
+  await expect(run(['--previous', 'old.json'])).rejects.toThrow()
+  await expect(run(['--commit', '--output', '../other.json'])).rejects.toThrow()
+  await run(['--help'])
   expect(servers.sdo.latestVersion).not.toHaveBeenCalled()
 })
 it('uses providers even when an old patch cache exists', async () => {
   await mkdir(join(directory, 'versions/.cache'), { recursive: true })
   await writeFile(join(directory, `versions/.cache/sdo-${version}.json`), '[]')
-  vi.spyOn(process, 'cwd').mockReturnValue(directory)
-  await runStatus(args())
+  await run()
   expect(servers.sdo.latestVersion).toHaveBeenCalledOnce()
 })
-it('validates the documented example', async () => {
+it('validates the flat documented example', async () => {
   expect(
-    parseStatus(
-      await readFile(
-        new URL('../../../docs/status.example.json', import.meta.url),
-        'utf8',
+    Object.keys(
+      parseStatus(
+        await readFile(
+          new URL('../../../docs/status.example.json', import.meta.url),
+          'utf8',
+        ),
       ),
-    ).regions,
-  ).toHaveLength(4)
+    ),
+  ).toEqual([...serversToCheck])
 })
-it('fails explicitly supplied missing baseline files before querying', async () => {
-  await expect(
-    runStatus([
-      '--baselines',
-      join(directory, 'missing.json'),
-      '--output',
-      join(directory, 'status.json'),
-    ]),
-  ).rejects.toThrow()
+it('allows an absent default baseline but rejects an explicitly missing baseline', async () => {
+  await expect(run(['--baselines', 'missing.json'])).rejects.toThrow()
   expect(servers.squareEnix.latestVersion).not.toHaveBeenCalled()
+  await rm(join(directory, '.ci/versions.json'))
+  const result = await run()
+  expect(result?.versions).toEqual({ squareEnix: version })
+  expect(result?.updateRequired).toBe(true)
 })

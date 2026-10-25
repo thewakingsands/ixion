@@ -23,8 +23,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-exd-schema:
+  observe:
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.observe.outputs.sha }}
+      update_required: ${{ steps.observe.outputs.update_required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+      - name: Install without native build scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build observation dependencies
+        run: pnpm --filter '@ffcafe/ixion-server...' build
+      - name: Observe and commit versions
+        id: observe
+        run: pnpm status --commit
+
+  update-exd-schema:
+    needs: observe
+    if: needs.observe.outputs.update_required == 'true' || inputs.force_release
     permissions:
       contents: write
     outputs:
@@ -34,7 +60,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.observe.outputs.sha }}
           submodules: true
 
       - name: Update EXDSchema submodule
@@ -50,7 +76,7 @@ jobs:
             git config user.email "actions@github.com"
             git add lib/EXDSchema
             git commit -m "chore: update EXDSchema"
-            git push
+            git push origin HEAD:main
           fi
 
       - name: Record source revision

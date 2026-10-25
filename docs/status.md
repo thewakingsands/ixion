@@ -1,6 +1,6 @@
 # Client version observations
 
-Ixion observes the latest client version for China (`sdo` / `cn`), international (`squareEnix` / `global`), Korea (`actoz` / `kr`) and Taiwan (`userjoy` / `tw`). International observations use Thaliak; the other regions query their patch services directly.
+Ixion observes China (`sdo` / `cn`), international (`squareEnix` / `global`), Korea (`actoz` / `kr`) and Taiwan (`userjoy` / `tw`). International observations use Thaliak; the others query their patch services directly. Only version metadata is fetched.
 
 ## Run locally
 
@@ -9,67 +9,35 @@ Use Node 24.11 or later and the repository's pnpm version:
 ```sh
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm --filter '@ffcafe/ixion-server...' build
-pnpm status --output status.json
-pnpm status --previous status.json --output status.json
+pnpm status
 ```
 
-The standalone entry only needs the server package and its dependencies built. It does not load the image encoder or the game-data update commands. A full CLI build also produces `packages/cli/dist/status.js` with the same arguments.
+The standalone entry needs only the server package and its dependencies built. The CLI build also provides `node packages/cli/dist/status.js` with the same arguments.
 
-`--baselines` defaults to `.ci/versions.json`. Direct patch providers use the recorded released version to query the patch server, together with the existing boot identifier. Missing or invalid regional values produce `baseline_unavailable`; the initialization placeholder `2012.01.01.0000.0000` is rejected. Supply a real released version before first observation of a new region. Invalid JSON and explicitly supplied missing files fail the command. Thaliak does not require a baseline.
+`--baselines` defaults to `.ci/versions.json`; `--output` defaults to `.ci/versions-observed.json`. The output file is read as the previous observation, then replaced only when versions change. A missing output file starts empty. Invalid JSON, unknown observed keys, invalid observed versions and inputs over 1 MiB fail before querying.
 
-Omit `--previous` for the first local observation. An explicitly named previous file must exist and validate. Local writes use a temporary file and rename. Inputs are limited to 1 MiB. Requests have a 30-second timeout; timeout, network errors, HTTP 429 and 5xx retry once after one second.
+Patch providers use the released version and existing boot identifier. Missing or invalid regional baselines, including the initialization placeholder, produce `baseline_unavailable`. Thaliak can query without a baseline. Explicitly named missing baseline files fail; an absent default baseline is treated as empty.
 
-## Public JSON
+Requests time out after 30 seconds and retry transient failures once. Failed regions retain their previous observed versions; first-time failures are omitted. Errors appear in the command log only. All failures leave an existing file unchanged and do not create a first file.
 
-See [status.example.json](status.example.json) for synthetic data. `schemaVersion` is 1 and `regions` always contains every region in the order listed above.
+## Repository JSON
 
-| Field | Meaning |
-| --- | --- |
-| server, region, source | Fixed identity and observation source |
-| version | Last successfully observed client version, or null |
-| observedAt | UTC time of that successful observation, or null |
-| attemptedAt | UTC start time of the latest observation attempt |
-| error | null on success; otherwise timeout, upstream, invalid_response or baseline_unavailable |
+The file uses the same flat server-to-version format as `.ci/versions.json`; see [status.example.json](status.example.json). `.ci/versions.json` remains the released-version record. No observation timestamps or health fields are stored.
 
-Failed queries keep the previous version and observation time. A first-time failure has null version and observedAt. All regions are independent, so an unavailable service does not prevent updates for the others. An output containing regional errors is a successful command (exit 0); check `error` for regional health. Input, storage or publication errors exit nonzero.
+Consumers read `https://raw.githubusercontent.com/thewakingsands/ixion/main/.ci/versions-observed.json` after the first successful workflow publication. ETag / If-None-Match can support cached reads. Commit time describes a content change, not each region's latest successful check; inspect Actions logs for check times and errors.
 
-Display when a version was last checked and indicate a failed recent attempt. There is no shared expiry threshold. Thaliak's observation time describes when Ixion read Thaliak, rather than when the publisher released the game version.
+## Update workflow
 
-## Publish to S3
+`.github/workflows/ci.yml` runs on Tuesdays at 16:00 UTC+8 and supports manual dispatch, including Thursday hotfix checks. GitHub may delay scheduled runs. The existing concurrency group serializes observation and release together.
 
-The workflow `.github/workflows/status.yml` runs every half hour and supports manual runs on the default branch. GitHub may delay scheduled runs. Its concurrency group serializes publication; keep any manual publishers serialized with it too.
+The observation job builds only server dependencies and runs `pnpm status --commit`. This commits and pushes only `.ci/versions-observed.json`, then writes `sha` and `update_required` to GitHub outputs. It needs contents: write and checkout's Git credentials; no additional storage credentials are required.
 
-Configure these repository variables:
+A successful observation differing from the released-version record triggers EXDSchema update, full build and release. Comparing with released versions allows the same observed version to retry after a download failure. Failed regions never trigger updates using stale observations. `force_release` explicitly runs the existing update path; `allow_missing_remote_version` keeps its existing meaning.
 
-| Variable | Value |
-| --- | --- |
-| STATUS_S3_ENDPOINT | HTTPS S3-compatible endpoint |
-| STATUS_S3_REGION | S3 signing region |
-| STATUS_S3_BUCKET | Existing bucket |
-| STATUS_S3_KEY | Dedicated object key, for example status.json |
-| STATUS_S3_FORCE_PATH_STYLE | true for path-style addressing, otherwise false or empty |
+Unchanged versions create no empty commit. Git publication failure fails the observation job and prevents downstream work. The EXDSchema job checks out the observation SHA, and subsequent jobs use its resulting SHA. Release commits preserve the observation file. The existing release-attachment recovery limitation is tracked separately in MJT-98.
 
-Set secrets `STATUS_S3_ACCESS_KEY_ID`, `STATUS_S3_SECRET_ACCESS_KEY` and, for temporary credentials, `STATUS_S3_SESSION_TOKEN`. The command receives them as standard AWS credential environment variables. Use credentials restricted to reading and writing the status object. S3 must allow missing-key detection: on AWS, prefix-restricted ListBucket permission is needed to receive a missing-object response instead of 403. A 403 is always an error, never an empty initial state.
-
-For a manual environment configured with the same variables and AWS credentials:
-
-```sh
-pnpm status --publish
-```
-
-Publication reads the previous object using authenticated GetObject. Only NoSuchKey starts an empty history. Missing buckets, access failures, invalid JSON and oversized objects stop before observation or publication. The next document is validated and uploaded once with `application/json` and `public, max-age=0, must-revalidate`.
-
-An interrupted upload may have succeeded even if the command reports failure. The next run reads the current object again. A successful upload replaces the whole document. Avoid using the same key for any other purpose.
-
-Configure anonymous reads or a CDN for this object and record the public URL in the deployment handoff. Add CORS when a browser consumer's origin is known. After configuration, run the workflow manually, fetch the URL without credentials, check fields and cache headers, then confirm a scheduled run advances attemptedAt. Check the workflow failure result and per-region errors separately. No public endpoint or production credentials are included in this change.
+After merge, manually verify that the observed file appears on main before downloads start, unchanged versions skip heavy jobs, forced updates run, and GitHub raw allows anonymous reads. Confirm the next scheduled run. These production checks require an actual Actions run.
 
 ## Future support display
 
-Read this file and the official profile index independently. Match profiles by region and version:
-
-- No successful observed version, or a failed index fetch: unknown.
-- Successfully loaded index with no match: no official profile.
-- Matching profile has only opcodes or only memory: partial support; list the capabilities.
-- At least one matching profile contains both: a complete profile is available.
-
-Do not combine capabilities across different profiles. For multiple builds of one version, show the matching profiles and their capabilities. Local imports do not count as official support. Actual connections still require the full executable hash match. Profile publication and withdrawal do not rewrite the observation file. Consumer code and pages are delivered separately.
+Consumers independently match official profiles by region and observed version. Missing observations or an unavailable index mean unknown; no match means no official profile. One capability means partial support; at least one profile must contain both opcodes and memory for complete support. Actual connections still check the full executable hash. Consumer integration and pages are delivered separately.

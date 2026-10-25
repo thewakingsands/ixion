@@ -1,20 +1,20 @@
 import { type GameVersions, ObservationError } from '@ffcafe/ixion-server'
 import { describe, expect, it, type Mock, vi } from 'vitest'
+import { serversToCheck } from '../src/actions/ci/constants'
 import {
   observeStatus,
   parseBaselines,
   parseStatus,
-  regions,
   type ServerName,
 } from '../src/actions/status'
 
 const version = '2026.01.01.0000.0000'
-const baselines = Object.fromEntries(regions.map((r) => [r.server, version]))
-const now = () => new Date('2026-01-01T01:00:00.000Z')
+const next = '2026.01.02.0000.0000'
+const baselines = Object.fromEntries(serversToCheck.map((s) => [s, version]))
 const providers = () =>
   Object.fromEntries(
-    regions.map((r) => [
-      r.server,
+    serversToCheck.map((s) => [
+      s,
       { latestVersion: vi.fn(async () => version) },
     ]),
   ) as Record<
@@ -25,72 +25,79 @@ const providers = () =>
       >
     }
   >
-const previous = () => ({
-  schemaVersion: 1 as const,
-  regions: regions.map((r) => ({
-    ...r,
-    version,
-    observedAt: '2026-01-01T00:00:00.000Z',
-    attemptedAt: '2026-01-01T00:00:00.000Z',
-    error: null,
-  })),
-})
 
-describe('status generation', () => {
-  it('keeps failed regions intact and clears previous errors after success', async () => {
-    const p = providers(),
-      old = previous()
+describe('version observation', () => {
+  it('keeps failed regions and updates successful regions without persisting errors', async () => {
+    const p = providers()
     p.sdo.latestVersion.mockRejectedValue(
       new ObservationError('invalid_response'),
     )
+    p.actoz.latestVersion.mockResolvedValue(next)
     const result = await observeStatus({
       baselines,
       providers: p,
-      now,
-      previous: old,
+      previous: { sdo: version },
     })
-    expect(result.regions[0]).toEqual({
-      ...old.regions[0],
-      attemptedAt: now().toISOString(),
-      error: 'invalid_response',
-    })
-    expect(result.regions[1].observedAt).toBe(now().toISOString())
-    expect(parseStatus(JSON.stringify(result))).toEqual(result)
-    const recovered = await observeStatus({
-      baselines,
-      providers: providers(),
-      previous: result,
-      now,
-    })
-    expect(recovered.regions[0].error).toBeNull()
-    expect(recovered.regions[0].observedAt).toBe(now().toISOString())
+    expect(result.versions).toEqual({ ...baselines, actoz: next })
+    expect(result.errors).toEqual({ sdo: 'invalid_response' })
+    expect(result.updateRequired).toBe(true)
+    expect(parseStatus(JSON.stringify(result.versions))).toEqual(
+      result.versions,
+    )
   })
-  it('publishes first-time failures without inventing successful observations', async () => {
+  it('omits first failures and does not invent observations from release records', async () => {
     const p = providers()
     for (const provider of Object.values(p))
       provider.latestVersion.mockRejectedValue(new ObservationError('upstream'))
-    const result = await observeStatus({ baselines, providers: p, now })
-    expect(
-      result.regions.every(
-        (r) =>
-          r.version === null && r.observedAt === null && r.error === 'upstream',
-      ),
-    ).toBe(true)
+    const first = await observeStatus({ baselines, providers: p })
+    expect(first.versions).toEqual({})
+    expect(first.updateRequired).toBe(false)
+    const later = await observeStatus({
+      baselines,
+      providers: p,
+      previous: { sdo: next },
+    })
+    expect(later.versions).toEqual({ sdo: next })
+    expect(later.updateRequired).toBe(false)
   })
-  it('requires real baselines only for direct patch providers', async () => {
+  it('retries an unchanged observed version after a failed download until released', async () => {
     const p = providers()
-    const result = await observeStatus({
+    p.sdo.latestVersion.mockResolvedValue(next)
+    const first = await observeStatus({ baselines, providers: p })
+    const retry = await observeStatus({
+      baselines,
+      providers: p,
+      previous: first.versions,
+    })
+    expect(retry.versions).toEqual(first.versions)
+    expect(first.updateRequired).toBe(true)
+    expect(retry.updateRequired).toBe(true)
+    const released = await observeStatus({
+      baselines: { ...baselines, sdo: next },
+      providers: p,
+      previous: retry.versions,
+    })
+    expect(released.updateRequired).toBe(false)
+  })
+  it('triggers a successful global observation with no release record', async () => {
+    const p = providers()
+    const result = await observeStatus({ baselines: {}, providers: p })
+    expect(result.versions).toEqual({ squareEnix: version })
+    expect(result.updateRequired).toBe(true)
+    expect(result.errors).toEqual({
+      sdo: 'baseline_unavailable',
+      actoz: 'baseline_unavailable',
+      userjoy: 'baseline_unavailable',
+    })
+  })
+  it('requires real baselines only for patch providers', async () => {
+    const p = providers()
+    await observeStatus({
       baselines: { sdo: '2012.01.01.0000.0000', actoz: 'bad' },
       providers: p,
-      now,
     })
-    expect(result.regions.map((r) => r.error)).toEqual([
-      'baseline_unavailable',
-      null,
-      'baseline_unavailable',
-      'baseline_unavailable',
-    ])
     expect(p.sdo.latestVersion).not.toHaveBeenCalled()
+    expect(p.actoz.latestVersion).not.toHaveBeenCalled()
     expect(p.squareEnix.latestVersion).toHaveBeenCalledOnce()
   })
   it('retries transient network errors once and never retries invalid responses', async () => {
@@ -102,13 +109,13 @@ describe('status generation', () => {
     p.actoz.latestVersion.mockRejectedValue(
       new ObservationError('invalid_response'),
     )
-    const result = await observeStatus({ baselines, providers: p, now, sleep })
+    const result = await observeStatus({ baselines, providers: p, sleep })
     expect(p.sdo.latestVersion).toHaveBeenCalledTimes(2)
     expect(p.actoz.latestVersion).toHaveBeenCalledOnce()
     expect(sleep).toHaveBeenCalledWith(1000)
-    expect(result.regions[0].error).toBeNull()
+    expect(result.errors.sdo).toBeUndefined()
   })
-  it('aborts timed-out requests and preserves other regions', async () => {
+  it('aborts timed-out requests and keeps successful regions', async () => {
     const p = providers()
     p.sdo.latestVersion.mockImplementation(
       (_base, signal) =>
@@ -122,43 +129,42 @@ describe('status generation', () => {
     const result = await observeStatus({
       baselines,
       providers: p,
-      now,
       timeoutMs: 5,
       sleep: async () => {},
     })
-    expect(result.regions[0].error).toBe('timeout')
+    expect(result.errors).toEqual({ sdo: 'timeout' })
     expect(p.sdo.latestVersion).toHaveBeenCalledTimes(2)
-    expect(result.regions.slice(1).every((r) => r.error === null)).toBe(true)
+    expect(Object.keys(result.versions)).toHaveLength(3)
+  })
+  it('rejects malformed provider output', async () => {
+    const p = providers()
+    p.sdo.latestVersion.mockResolvedValue('not a version')
+    const result = await observeStatus({ baselines, providers: p })
+    expect(result.errors.sdo).toBe('invalid_response')
+    expect(result.versions.sdo).toBeUndefined()
   })
 })
 
 describe('input validation', () => {
-  it('rejects damaged schemas, duplicates, missing regions and mismatched values', () => {
-    const valid = previous()
-    for (const value of [
-      { ...valid, schemaVersion: 2 },
-      { ...valid, regions: valid.regions.slice(1) },
-      { ...valid, regions: [valid.regions[0], ...valid.regions.slice(0, 3)] },
-      {
-        ...valid,
-        regions: valid.regions.map((r) => ({ ...r, source: 'secret-url' })),
-      },
-      {
-        ...valid,
-        regions: valid.regions.map((r) => ({ ...r, observedAt: null })),
-      },
-      {
-        ...valid,
-        regions: valid.regions.map((r) => ({
-          ...r,
-          error: 'raw-secret-message',
-        })),
-      },
-    ]) {
-      expect(() => parseStatus(JSON.stringify(value))).toThrow()
-    }
+  it.each([
+    '[]',
+    'null',
+    '{',
+    '{"unknown":"2026.01.01.0000.0000"}',
+    '{"sdo":null}',
+    '{"sdo":"bad"}',
+    '{"schemaVersion":1,"regions":[]}',
+  ])('rejects corrupt observation %s', (text) => {
+    expect(() => parseStatus(text)).toThrow()
+  })
+  it('limits size, validates baseline shape and orders keys', () => {
     expect(() => parseStatus('x'.repeat(1024 * 1024 + 1))).toThrow('1 MiB')
     expect(() => parseBaselines('{')).toThrow()
     expect(() => parseBaselines('[]')).toThrow()
+    expect(
+      Object.keys(
+        parseStatus(JSON.stringify({ userjoy: version, sdo: version })),
+      ),
+    ).toEqual(['sdo', 'userjoy'])
   })
 })

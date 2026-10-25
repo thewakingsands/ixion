@@ -1,88 +1,73 @@
 import { randomUUID } from 'node:crypto'
-import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { ciVersionsPath, serversToCheck } from './actions/ci/constants'
+import { commitAndPush, writeGithubOutput } from './actions/ci/github'
 import {
   maxStatusBytes,
+  type Observation,
   observeStatus,
   parseBaselines,
   parseStatus,
-  type Status,
 } from './actions/status'
-import { publishStatus, statusTarget } from './actions/status-storage'
 
-async function readBounded(path: string) {
+async function readBounded(path: string): Promise<string> {
   if ((await stat(path)).size > maxStatusBytes)
     throw new Error('Input exceeds 1 MiB')
   const data = await readFile(path)
   if (data.length > maxStatusBytes) throw new Error('Input exceeds 1 MiB')
   return new TextDecoder('utf-8', { fatal: true }).decode(data)
 }
+const missing = (error: NodeJS.ErrnoException) => {
+  if (error.code === 'ENOENT') return '{}'
+  throw error
+}
+const observedPath = '.ci/versions-observed.json'
 
 export async function runStatus(
   args: string[],
   env = process.env,
-): Promise<Status | undefined> {
+  cwd = process.cwd(),
+): Promise<Observation | undefined> {
   const { values, tokens } = parseArgs({
     tokens: true,
     args,
     options: {
-      baselines: { type: 'string', default: '.ci/versions.json' },
-      previous: { type: 'string' },
-      output: { type: 'string' },
-      publish: { type: 'boolean', default: false },
+      baselines: { type: 'string', default: ciVersionsPath },
+      output: { type: 'string', default: observedPath },
+      commit: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
     },
   })
   if (values.help) {
     console.log(
-      'Usage: pnpm status [--baselines .ci/versions.json] [--previous previous.json] --output status.json\n       pnpm status [--baselines .ci/versions.json] --publish',
+      'Usage: pnpm status [--baselines .ci/versions.json] [--output .ci/versions-observed.json]\n       pnpm status --commit  (commit and push observations; emit GitHub outputs)',
     )
     return
   }
-  if (
-    values.publish
-      ? values.previous !== undefined || values.output !== undefined
-      : !values.output
-  ) {
-    throw new Error(
-      'Choose --output or --publish; --previous is only supported with --output',
-    )
-  }
-  const baselines = await readBounded(values.baselines)
-    .then(parseBaselines)
-    .catch((error) => {
-      if (
-        !tokens.some(
-          (token) => token.kind === 'option' && token.name === 'baselines',
-        ) &&
-        error.code === 'ENOENT'
-      )
-        return {}
-      throw error
-    })
-  let result: Status
-  if (values.publish) {
-    const target = statusTarget(env)
-    try {
-      result = await publishStatus(target, (previous) =>
-        observeStatus({ baselines, previous }),
-      )
-    } finally {
-      target.client.destroy()
-    }
-  } else {
-    const previous = values.previous
-      ? parseStatus(await readBounded(values.previous))
-      : null
-    result = parseStatus(
-      JSON.stringify(await observeStatus({ baselines, previous })),
-    )
-    const output = resolve(values.output as string)
+  if (values.commit && values.output !== observedPath)
+    throw new Error('--commit only publishes .ci/versions-observed.json')
+  const baselineText = await readBounded(resolve(cwd, values.baselines)).catch(
+    (error) => {
+      if (tokens.some((t) => t.kind === 'option' && t.name === 'baselines'))
+        throw error
+      return missing(error)
+    },
+  )
+  const baselines = parseBaselines(baselineText)
+  const output = resolve(cwd, values.output)
+  const previous = parseStatus(await readBounded(output).catch(missing))
+  const result = await observeStatus({ baselines, previous })
+  const versions = parseStatus(JSON.stringify(result.versions))
+  for (const server of serversToCheck)
+    console.log(`${server}: ${result.errors[server] ?? versions[server]}`)
+  if (JSON.stringify(versions) !== JSON.stringify(previous)) {
+    await mkdir(dirname(output), { recursive: true })
     const temporary = `${output}.${randomUUID()}.tmp`
     try {
-      await writeFile(temporary, `${JSON.stringify(result, null, 2)}\n`, {
+      await writeFile(temporary, `${JSON.stringify(versions, null, 2)}\n`, {
         flag: 'wx',
       })
       await rename(temporary, output)
@@ -90,8 +75,22 @@ export async function runStatus(
       await rm(temporary, { force: true })
     }
   }
-  for (const r of result.regions)
-    console.log(`${r.server}: ${r.error ?? 'ok'} (${r.attemptedAt})`)
+  if (values.commit) {
+    const sha = await commitAndPush(
+      observedPath,
+      'ci: update observed versions',
+      cwd,
+    )
+    if (env.GITHUB_OUTPUT) {
+      writeGithubOutput('sha', sha, env.GITHUB_OUTPUT)
+      writeGithubOutput(
+        'update_required',
+        String(result.updateRequired),
+        env.GITHUB_OUTPUT,
+      )
+    }
+  }
+  console.log(`update_required=${result.updateRequired}`)
   return result
 }
 
@@ -100,9 +99,8 @@ if (
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
   runStatus(process.argv.slice(2)).catch(() => {
-    // Upstream and SDK exceptions can include endpoints or credentials.
     console.error(
-      'Status command failed. Check arguments, input files and S3 configuration; no further write was attempted after the failure.',
+      'Version observation failed. Check input files and Git publication; downstream update must not run.',
     )
     process.exitCode = 1
   })

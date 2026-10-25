@@ -5,153 +5,92 @@ import {
   servers,
 } from '@ffcafe/ixion-server'
 import { bootVersion } from '../config'
+import { serversToCheck } from './ci/constants'
 
-export const regions = [
-  { server: 'sdo', region: 'cn', source: 'sdo' },
-  { server: 'squareEnix', region: 'global', source: 'thaliak' },
-  { server: 'actoz', region: 'kr', source: 'actoz' },
-  { server: 'userjoy', region: 'tw', source: 'userjoy' },
-] as const
-export type ServerName = (typeof regions)[number]['server']
+export type ServerName = (typeof serversToCheck)[number]
+export type ObservedVersions = Partial<Record<ServerName, string>>
 export type StatusError =
   | 'timeout'
   | 'upstream'
   | 'invalid_response'
   | 'baseline_unavailable'
-export interface RegionStatus {
-  server: string
-  region: string
-  source: string
-  version: string | null
-  observedAt: string | null
-  attemptedAt: string
-  error: StatusError | null
-}
-export interface Status {
-  schemaVersion: 1
-  regions: RegionStatus[]
+export interface Observation {
+  versions: ObservedVersions
+  errors: Partial<Record<ServerName, StatusError>>
+  updateRequired: boolean
 }
 export const maxStatusBytes = 1024 * 1024
-const errors = [
-  'timeout',
-  'upstream',
-  'invalid_response',
-  'baseline_unavailable',
-]
-const isTime = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) &&
-  Number.isFinite(Date.parse(value)) &&
-  new Date(value).toISOString() === value
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
 
-export function parseStatus(text: string): Status {
+export function parseBaselines(text: string): Record<string, unknown> {
   if (Buffer.byteLength(text) > maxStatusBytes)
-    throw new Error('Status file exceeds 1 MiB')
+    throw new Error('Input exceeds 1 MiB')
   const value: unknown = JSON.parse(text)
-  if (
-    !object(value) ||
-    value.schemaVersion !== 1 ||
-    !Array.isArray(value.regions) ||
-    value.regions.length !== regions.length
-  )
-    throw new Error('Invalid status file')
-  const parsed = regions.map((identity) => {
-    const matches = (value.regions as unknown[]).filter(
-      (r) => object(r) && r.server === identity.server,
-    )
-    const r = matches[0]
-    if (
-      matches.length !== 1 ||
-      !object(r) ||
-      r.region !== identity.region ||
-      r.source !== identity.source ||
-      !isTime(r.attemptedAt) ||
-      !(r.error === null || errors.includes(r.error as string)) ||
-      !(
-        (r.version === null && r.observedAt === null) ||
-        (isGameVersion(r.version) && isTime(r.observedAt))
-      ) ||
-      (r.error === null &&
-        (r.version === null || String(r.observedAt) < r.attemptedAt))
-    ) {
-      throw new Error('Invalid status region')
-    }
-    return {
-      ...identity,
-      version: r.version as string | null,
-      observedAt: r.observedAt as string | null,
-      attemptedAt: r.attemptedAt,
-      error: r.error as StatusError | null,
-    }
-  })
-  return { schemaVersion: 1, regions: parsed }
+  if (!object(value)) throw new Error('Invalid versions file')
+  return value
 }
 
-export function parseBaselines(text: string): Record<string, unknown> {
-  const value: unknown = JSON.parse(text)
-  if (!object(value)) throw new Error('Invalid baselines file')
-  return value
+export function parseStatus(text: string): ObservedVersions {
+  const value = parseBaselines(text)
+  if (
+    Object.entries(value).some(
+      ([key, version]) =>
+        !serversToCheck.includes(key as ServerName) || !isGameVersion(version),
+    )
+  )
+    throw new Error('Invalid observed versions file')
+  return Object.fromEntries(
+    serversToCheck
+      .filter((key) => key in value)
+      .map((key) => [key, value[key]]),
+  )
 }
 
 interface Provider {
   latestVersion(versions?: GameVersions, signal?: AbortSignal): Promise<string>
 }
 interface Options {
-  previous?: Status | null
+  previous?: ObservedVersions
   baselines: Record<string, unknown>
   providers?: Record<ServerName, Provider>
-  now?: () => Date
   timeoutMs?: number
   sleep?: (ms: number) => Promise<void>
 }
 
 export async function observeStatus({
-  previous,
+  previous = {},
   baselines,
   providers = servers,
-  now = () => new Date(),
   timeoutMs = 30_000,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-}: Options): Promise<Status> {
+}: Options): Promise<Observation> {
   const results = await Promise.all(
-    regions.map(async (identity): Promise<RegionStatus> => {
-      const old = previous?.regions.find((r) => r.server === identity.server)
-      const attemptedAt = now().toISOString()
-      const failed = (error: StatusError): RegionStatus => ({
-        ...identity,
-        attemptedAt,
+    serversToCheck.map(async (server) => {
+      const failed = (error: StatusError) => ({
+        server,
         error,
-        version: old?.version ?? null,
-        observedAt: old?.observedAt ?? null,
+        version: previous[server],
       })
-      const base = baselines[identity.server]
+      const base = baselines[server]
       if (
-        identity.server !== 'squareEnix' &&
+        server !== 'squareEnix' &&
         (!isGameVersion(base) || base === '2012.01.01.0000.0000')
-      ) {
+      )
         return failed('baseline_unavailable')
-      }
       const versions = isGameVersion(base)
         ? { boot: bootVersion, ffxiv: base, expansions: {} }
         : undefined
       for (let attempt = 0; attempt < 2; attempt++) {
         const signal = AbortSignal.timeout(timeoutMs)
         try {
-          const version = await providers[identity.server].latestVersion(
+          const version = await providers[server].latestVersion(
             versions,
             signal,
           )
           if (!isGameVersion(version))
             throw new ObservationError('invalid_response')
-          return {
-            ...identity,
-            version,
-            attemptedAt,
-            observedAt: now().toISOString(),
-            error: null,
-          }
+          return { server, version, error: null }
         } catch (error) {
           const code = signal.aborted
             ? 'timeout'
@@ -170,5 +109,18 @@ export async function observeStatus({
       return failed('upstream')
     }),
   )
-  return { schemaVersion: 1, regions: results }
+  const versions: ObservedVersions = {}
+  const errors: Observation['errors'] = {}
+  for (const result of results) {
+    if (result.version !== undefined) versions[result.server] = result.version
+    if (result.error) errors[result.server] = result.error
+  }
+  return {
+    versions,
+    errors,
+    // Compare successful observations with releases so a failed download can retry next run.
+    updateRequired: results.some(
+      (r) => !r.error && r.version !== baselines[r.server],
+    ),
+  }
 }

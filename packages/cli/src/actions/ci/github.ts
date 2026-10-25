@@ -20,31 +20,23 @@ export function isGitHubActions(): boolean {
   return process.env.GITHUB_ACTIONS === 'true'
 }
 
-async function configGit(): Promise<void> {
-  await $`git config --global user.name ${ciGitUserName}`
-  await $`git config --global user.email ${ciGitUserEmail}`
-}
-
 export async function commitAndPush(
   path: string,
   message: string,
+  cwd = process.cwd(),
 ): Promise<string> {
-  await configGit()
-
-  // Check if there are changes to commit before proceeding
-  const status = await $`git status --porcelain ${path}`
-  if (!status.stdout.trim()) {
-    // No changes, skip commit and push, return current HEAD
-    const hash = await $`git rev-parse HEAD`
-    return hash.stdout.trim()
+  const git = $({ cwd })
+  const status = await git`git status --porcelain -- ${path}`
+  if (status.stdout.trim()) {
+    await git`git config user.name ${ciGitUserName}`
+    await git`git config user.email ${ciGitUserEmail}`
+    await git`git pull --ff-only`
+    await git`git add -- ${path}`
+    // Other staged work must not enter automated version commits.
+    await git`git commit --only -m ${message} -- ${path}`
+    await git`git push`
   }
-
-  await $`git pull`
-  await $`git add ${path}`
-  await $`git commit -m ${message}`
-  await $`git push`
-
-  const hash = await $`git rev-parse HEAD`
+  const hash = await git`git rev-parse HEAD`
   return hash.stdout.trim()
 }
 
@@ -114,8 +106,11 @@ export async function createGitHubRelease(
   }
 }
 
-export function writeGithubOutput(key: string, value: string) {
-  const file = process.env.GITHUB_OUTPUT
+export function writeGithubOutput(
+  key: string,
+  value: string,
+  file = process.env.GITHUB_OUTPUT,
+) {
   if (!file) {
     throw new Error('GITHUB_OUTPUT environment variable is required')
   }
