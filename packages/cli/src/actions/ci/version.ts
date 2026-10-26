@@ -21,6 +21,9 @@ export function readReleasedVersions(): Record<string, string> {
 /**
  * Write released versions to .ci/versions.json
  */
-export function writeReleasedVersions(versions: Record<string, string>): void {
-  writeFileSync(ciVersionsPath, JSON.stringify(versions, null, 2), 'utf-8')
+export function writeReleasedVersions(
+  versions: Record<string, string>,
+  path = ciVersionsPath,
+): void {
+  writeFileSync(path, JSON.stringify(versions, null, 2), 'utf-8')
 }
