@@ -12,16 +12,18 @@
       }
     },
     {
-      "name": "minio",
-      "type": "minio",
+      "name": "backbone",
+      "type": "s3",
       "config": {
-        "endPoint": "{{ MINIO_ENDPOINT }}",
+        "publicationMode": "cooperative",
+        "endPoint": "{{ BACKBONE_ENDPOINT }}",
         "port": 443,
         "useSSL": true,
-        "accessKey": "{{ MINIO_ACCESS_KEY }}",
-        "secretKey": "{{ MINIO_SECRET_KEY }}",
-        "bucketName": "{{ MINIO_BUCKET_NAME }}",
-        "prefix": "{{ MINIO_PREFIX }}",
+        "accessKey": "{{ BACKBONE_ACCESS_KEY }}",
+        "secretKey": "{{ BACKBONE_SECRET_KEY }}",
+        "bucketName": "{{ BACKBONE_BUCKET_NAME }}",
+        "region": "{{ BACKBONE_REGION }}",
+        "prefix": "{{ BACKBONE_PREFIX }}",
         "paths": {
           "versions": "versions",
           "ui": "ui"
