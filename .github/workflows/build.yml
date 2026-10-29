@@ -10,50 +10,75 @@ on:
         description: Exact commit to build for the update workflow
         required: true
         type: string
+    outputs:
+      artifact-name:
+        description: CLI artifact matching the requested build inputs
+        value: ${{ jobs.build.outputs.artifact-name }}
+      run-id:
+        description: Workflow run containing the CLI artifact
+        value: ${{ jobs.build.outputs.run-id }}
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.artifact.outputs.name }}
+      run-id: ${{ steps.artifact.outputs.run-id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
-          submodules: true
+
+      - name: Test artifact selection
+        run: node --test scripts/cli-artifact.test.mjs
+
+      - name: Select CLI artifact
+        id: artifact
+        uses: actions/github-script@v7
+        env:
+          REUSE_ARTIFACT: ${{ inputs.ref != '' }}
+        with:
+          script: |
+            const { selectArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/cli-artifact.mjs`)
+            await selectArtifact({ github, context, core, reuse: process.env.REUSE_ARTIFACT === 'true' })
 
       - name: Setup Node.js
+        if: steps.artifact.outputs.reused != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
       - name: Setup pnpm
+        if: steps.artifact.outputs.reused != 'true'
         uses: pnpm/action-setup@v4
 
       - uses: ilammy/setup-nasm@v1
+        if: steps.artifact.outputs.reused != 'true'
 
       - name: Install dependencies
+        if: steps.artifact.outputs.reused != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build project
+        if: steps.artifact.outputs.reused != 'true'
         run: pnpm build
 
       - name: Test RGBA encoders
+        if: steps.artifact.outputs.reused != 'true'
         run: pnpm --filter @ffcafe/ixion-image-encoder test
 
       - name: Prepare CLI artifact
+        if: steps.artifact.outputs.reused != 'true'
         run: |
           rm -rf .ci/ixion-cli
           pnpm --filter @ffcafe/ixion-cli deploy --prod --legacy .ci/ixion-cli/packages/cli
-          mkdir -p .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions
-          mkdir -p .ci/ixion-cli/lib/EXDSchema
           cp package.json .ci/ixion-cli/package.json
-          cp .ixion-config.ci.json .ci/ixion-cli/.ixion-config.ci.json
-          cp lib/SaintCoinach/SaintCoinach/Definitions/*.json .ci/ixion-cli/lib/SaintCoinach/SaintCoinach/Definitions/
-          cp lib/EXDSchema/*.yml .ci/ixion-cli/lib/EXDSchema/
           rm -rf .ci/ixion-cli/packages/cli/node_modules/.pnpm/node_modules/@ffcafe/ixion-cli
           tar -C .ci/ixion-cli -cf .ci/ixion-cli.tar .
           mkdir -p .ci/ixion-cli-smoke
@@ -64,9 +89,10 @@ jobs:
           rm -rf .ci/ixion-cli-smoke
 
       - name: Upload artifact
+        if: steps.artifact.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ixion-cli
+          name: ${{ steps.artifact.outputs.name }}
           include-hidden-files: true
           path: .ci/ixion-cli.tar
 

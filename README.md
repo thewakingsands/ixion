@@ -335,7 +335,14 @@ checked by importing storage and starting the CLI with `--help`.
 
 `ci.yml` updates game data every Tuesday at 16:00 UTC+8, or on manual dispatch.
 It only runs on `main`; manual runs selecting another branch are skipped.
-The update workflow refreshes EXDSchema, calls the build workflow with the exact
-resulting commit, then runs patch updates from that build artifact. Release
+The update workflow refreshes EXDSchema and asks the build workflow for a CLI
+matching the resulting commit's build inputs. It reuses an unexpired artifact
+from a successful main-branch Build or update run when those inputs match;
+otherwise it builds a new one. Artifact names include a hash of tracked build
+inputs, so code, dependency and packaging changes invalidate reuse, while version
+records, runtime configuration and schemas do not. PR artifacts are never reused.
+The CLI archive contains code and production dependencies; each consuming job
+checks out configuration and schema submodules at the exact update revision.
+The observation job still builds its lightweight dependencies separately. Release
 version commits still run from a main checkout. CSV exports and xivstrings
 updates run only after the patch update succeeds. Update runs are serialized.

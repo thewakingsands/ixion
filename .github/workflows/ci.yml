@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ixion-game-data-update
@@ -94,12 +95,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       # ci update commits released versions and tags releases in this checkout.
       - name: Checkout source revision
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.update-exd-schema.outputs.sha }}
+          submodules: true
 
       - name: Track main for version commits
         run: |
@@ -110,7 +113,9 @@ jobs:
       - name: Download CLI artifact
         uses: actions/download-artifact@v4
         with:
-          name: ixion-cli
+          name: ${{ needs.build.outputs.artifact-name }}
+          run-id: ${{ needs.build.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract CLI artifact
         run: tar -xf ixion-cli.tar
@@ -158,12 +163,21 @@ jobs:
 
   datamining-cn:
     runs-on: ubuntu-latest
-    needs: update
+    needs: [update, build, update-exd-schema]
     steps:
+      - name: Checkout runtime configuration and schemas
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.update-exd-schema.outputs.sha }}
+          persist-credentials: false
+          submodules: true
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: ixion-cli
+          name: ${{ needs.build.outputs.artifact-name }}
+          run-id: ${{ needs.build.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract CLI artifact
         run: tar -xf ixion-cli.tar
@@ -205,12 +219,21 @@ jobs:
 
   datamining-cn-exd-schema:
     runs-on: ubuntu-latest
-    needs: update
+    needs: [update, build, update-exd-schema]
     steps:
+      - name: Checkout runtime configuration and schemas
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.update-exd-schema.outputs.sha }}
+          persist-credentials: false
+          submodules: true
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: ixion-cli
+          name: ${{ needs.build.outputs.artifact-name }}
+          run-id: ${{ needs.build.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract CLI artifact
         run: tar -xf ixion-cli.tar
@@ -262,12 +285,21 @@ jobs:
 
   datamining-tc:
     runs-on: ubuntu-latest
-    needs: update
+    needs: [update, build, update-exd-schema]
     steps:
+      - name: Checkout runtime configuration and schemas
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.update-exd-schema.outputs.sha }}
+          persist-credentials: false
+          submodules: true
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: ixion-cli
+          name: ${{ needs.build.outputs.artifact-name }}
+          run-id: ${{ needs.build.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract CLI artifact
         run: tar -xf ixion-cli.tar
