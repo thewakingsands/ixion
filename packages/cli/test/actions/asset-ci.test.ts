@@ -23,6 +23,6 @@ it('collects patch references only for CN while preserving other server updates'
 it('bootstraps only CN references before incremental UI extraction', async () => {
   await processAssets({ sdo: 'cn-version', squareEnix: 'global-version', actoz: 'kr-version' })
   expect(collectStoredAssetReferences).toHaveBeenCalledExactlyOnceWith('sdo', 'cn-version', {})
-  expect(extractUiPatchIcons).toHaveBeenCalledExactlyOnceWith({ server: 'sdo', storage: 'minio' })
+  expect(extractUiPatchIcons).toHaveBeenCalledExactlyOnceWith({ server: 'sdo', storage: 'backbone' })
   expect(vi.mocked(collectStoredAssetReferences).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(extractUiPatchIcons).mock.invocationCallOrder[0])
 })

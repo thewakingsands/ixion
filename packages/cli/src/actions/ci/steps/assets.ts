@@ -4,7 +4,7 @@ import { extractUiPatchIcons } from '../../asset-ui-icons'
 import { mergedVersionReference } from '../constants'
 
 const uiAssetServers = [mergedVersionReference] as const
-const ciAssetStorage = 'minio'
+const ciAssetStorage = 'backbone'
 
 export async function processAssets(
   versions: Record<string, string>,
