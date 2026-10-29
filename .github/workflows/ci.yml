@@ -123,11 +123,12 @@ jobs:
       - name: Run CI update command
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
-          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+          BACKBONE_ENDPOINT: ${{ secrets.BACKBONE_ENDPOINT }}
+          BACKBONE_ACCESS_KEY: ${{ secrets.BACKBONE_ACCESS_KEY }}
+          BACKBONE_SECRET_KEY: ${{ secrets.BACKBONE_SECRET_KEY }}
+          BACKBONE_BUCKET_NAME: ${{ secrets.BACKBONE_BUCKET_NAME }}
+          BACKBONE_REGION: ${{ secrets.BACKBONE_REGION }}
+          BACKBONE_PREFIX: ${{ secrets.BACKBONE_PREFIX }}
           FORCE_RELEASE: ${{ inputs.force_release && '--force-release' || '' }}
           ALLOW_MISSING_REMOTE_VERSION: ${{ inputs.allow_missing_remote_version && '--allow-missing-remote-version' || '' }}
         run: |
@@ -182,11 +183,12 @@ jobs:
         id: export-csv
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
-          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+          BACKBONE_ENDPOINT: ${{ secrets.BACKBONE_ENDPOINT }}
+          BACKBONE_ACCESS_KEY: ${{ secrets.BACKBONE_ACCESS_KEY }}
+          BACKBONE_SECRET_KEY: ${{ secrets.BACKBONE_SECRET_KEY }}
+          BACKBONE_BUCKET_NAME: ${{ secrets.BACKBONE_BUCKET_NAME }}
+          BACKBONE_REGION: ${{ secrets.BACKBONE_REGION }}
+          BACKBONE_PREFIX: ${{ secrets.BACKBONE_PREFIX }}
         run: |
           node packages/cli/dist/index.js ci init
           node packages/cli/dist/index.js exd export-csv ffxiv-datamining-cn -s sdo --crlf
@@ -240,11 +242,12 @@ jobs:
         id: export-csv
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
-          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+          BACKBONE_ENDPOINT: ${{ secrets.BACKBONE_ENDPOINT }}
+          BACKBONE_ACCESS_KEY: ${{ secrets.BACKBONE_ACCESS_KEY }}
+          BACKBONE_SECRET_KEY: ${{ secrets.BACKBONE_SECRET_KEY }}
+          BACKBONE_BUCKET_NAME: ${{ secrets.BACKBONE_BUCKET_NAME }}
+          BACKBONE_REGION: ${{ secrets.BACKBONE_REGION }}
+          BACKBONE_PREFIX: ${{ secrets.BACKBONE_PREFIX }}
         run: |
           node packages/cli/dist/index.js ci init
           node packages/cli/dist/index.js exd export-csv ffxiv-datamining-cn -s sdo --crlf --exd-schema lib/EXDSchema --skip-first-line
@@ -284,11 +287,12 @@ jobs:
         id: export-csv
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
-          MINIO_PREFIX: ${{ secrets.MINIO_PREFIX }}
+          BACKBONE_ENDPOINT: ${{ secrets.BACKBONE_ENDPOINT }}
+          BACKBONE_ACCESS_KEY: ${{ secrets.BACKBONE_ACCESS_KEY }}
+          BACKBONE_SECRET_KEY: ${{ secrets.BACKBONE_SECRET_KEY }}
+          BACKBONE_BUCKET_NAME: ${{ secrets.BACKBONE_BUCKET_NAME }}
+          BACKBONE_REGION: ${{ secrets.BACKBONE_REGION }}
+          BACKBONE_PREFIX: ${{ secrets.BACKBONE_PREFIX }}
         run: |
           node packages/cli/dist/index.js ci init
           node packages/cli/dist/index.js exd export-csv ffxiv-datamining-tc -s userjoy --crlf
