@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm, unlink } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { S3Storage, StorageManager } from '@ffcafe/ixion-storage'
 import { expect, it, vi } from 'vitest'
 import { BinaryAssetIndex } from '../../src/actions/asset/binary-index'
-import { digest } from '../../src/actions/asset/catalog'
+import { AssetCatalog, digest } from '../../src/actions/asset/catalog'
 import { createAssetStateEntry } from '../../src/actions/asset/patch'
 import { PublicationLock, readPublicationLock, unlockPublication } from '../../src/actions/asset/publication'
 import { AssetStorage } from '../../src/actions/asset/storage'
@@ -70,6 +70,11 @@ it('Garage publication skips confirmed bytes, seals new chunks, and resumes only
       return Object.getPrototypeOf(f.remote).writeFile.apply(f.remote, args)
     })
     await expect(f.sync()).rejects.toThrow('pointer failed')
+    const localRoot = join(f.root, 'local', 'ui', 'test')
+    const planPath = join(localRoot, 'publication-plan.json')
+    expect(JSON.parse(await readFile(planPath, 'utf8')).version).toBe('3')
+    const db = new AssetCatalog(join(localRoot, 'catalog.sqlite'), localRoot, undefined, true)
+    try { expect(db.get('pending')).toBeUndefined() } finally { db.close() }
     expect(await f.remote.readFileStrict('test', 'ui', 'current.json')).toEqual(current)
     const newKeys = f.writes.mock.calls.filter(c => c[2].startsWith('chunks/')).map(c => c[2])
     expect(newKeys).toHaveLength(1)
@@ -79,6 +84,7 @@ it('Garage publication skips confirmed bytes, seals new chunks, and resumes only
     f.reads.mockClear()
     await expect(f.sync()).rejects.toThrow('--resume')
     await f.sync(true)
+    await expect(readFile(planPath)).rejects.toMatchObject({code:'ENOENT'})
     expect(f.reads.mock.calls.some(c => c[2] === newKeys[0])).toBe(true)
     expect(f.reads.mock.calls.some(c => c[2] === oldKey)).toBe(false)
     expect(retryWrites.mock.calls.some(c => c[2].startsWith('chunks/'))).toBe(false)

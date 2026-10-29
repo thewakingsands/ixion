@@ -23,6 +23,7 @@ import { BinaryAssetIndex } from './binary-index'
 import { AssetCatalog, atomicWrite, catalogFileName, digest } from './catalog'
 import { createAssetStateEntry } from './patch'
 import { PublicationLock, writePublicationObject } from './publication'
+import { type PublicationPlan, PublicationPlanFile } from './publication-plan'
 import { loadAssetReferences, saveAssetReferences } from './references'
 import type {
   CurrentReference,
@@ -33,15 +34,6 @@ import type {
 export interface AssetStorageOptions {
   server: string
   storage?: string
-}
-interface Publication {
-  id: string
-  base: string | null
-  version: string
-  current: string
-  indexDigest: string
-  catalogDigest: string
-  destination: string
 }
 function versionPath(version: string) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(version))
@@ -69,6 +61,7 @@ export class AssetStorage {
   private prepared?: Promise<AssetCatalog>
   private readonly localLock: string
   private lockFd: number
+  private readonly publicationPlan: PublicationPlanFile
   constructor(options: AssetStorageOptions) {
     this.server = options.server
     const manager = getStorageManager()
@@ -82,6 +75,7 @@ export class AssetStorage {
     if (options.storage && !this.remoteStorage)
       throw new Error(`Storage not found: ${options.storage}`)
     this.outputRoot = local.getRootPath('ui', this.server)
+    this.publicationPlan = new PublicationPlanFile(this.outputRoot)
     this.patchRoot = join(this.outputRoot, 'patches')
     this.assetRoot = join(this.outputRoot, 'chunks')
     this.diffRoot = join(this.outputRoot, '.diff')
@@ -142,6 +136,7 @@ export class AssetStorage {
         db.set('base', current ? digest(current) : 'null')
       } else this.catalog = new AssetCatalog(path, this.outputRoot)
       if (!this.catalog) throw new Error('Catalog initialization failed')
+      this.publicationPlan.migrateLegacy(this.catalog)
       return this.catalog
     })()
     return this.prepared
@@ -174,7 +169,7 @@ export class AssetStorage {
     _version: string,
   ): Promise<Map<string, EncodedAssetFormat>> {
     const db = await this.prepare()
-    if (db.get('pending'))
+    if (this.publicationPlan.exists())
       throw new Error(
         'An asset publication is pending; resume ui-sync before building',
       )
@@ -237,7 +232,7 @@ export class AssetStorage {
   }
   async writeAssetState(version: string, state: Map<string, UiAssetEntry>) {
     const db = await this.prepare()
-    if (db.get('pending'))
+    if (this.publicationPlan.exists())
       throw new Error('Resume pending publication before building')
     const entries = [...state.values()]
     const index = db.index(entries) // Reject collisions before touching visible metadata.
@@ -308,14 +303,14 @@ export class AssetStorage {
     } finally {
       snapshotDb.close()
     }
-    let plan: Publication
-    const pending = db.get('pending')
+    let plan: PublicationPlan
+    const pending = this.publicationPlan.read()
     if (pending) {
       if (!resume)
         throw new Error(
           'Publication locked by a pending plan; use ui-sync --resume',
         )
-      plan = JSON.parse(pending)
+      plan = pending
       if (
         plan.id !== ref.publication ||
         plan.current !== current.toString() ||
@@ -336,14 +331,14 @@ export class AssetStorage {
         catalogDigest: digest(catalog),
         destination: remote.getPublicationKey(this.server),
       }
-      db.set('pending', JSON.stringify(plan))
+      this.publicationPlan.write(plan)
     }
     const beforeLock = await this.remoteRead('current.json')
     if (
       (beforeLock ? digest(beforeLock) : 'null') !== plan.base &&
       !beforeLock?.equals(current)
     ) {
-      if (!pending) db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+      if (!pending) this.publicationPlan.clear()
       throw new Error(
         'Remote asset baseline changed; rebuild against the latest catalog',
       )
@@ -368,12 +363,12 @@ export class AssetStorage {
     if (remoteCurrent?.equals(current)) {
       await lock.release()
       db.set('base', digest(current))
-      db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+      this.publicationPlan.clear()
       return
     }
     if ((remoteCurrent ? digest(remoteCurrent) : 'null') !== plan.base) {
       await lock.release()
-      db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+      this.publicationPlan.clear()
       throw new Error(
         'Remote asset baseline changed; rebuild against the latest catalog',
       )
@@ -457,7 +452,7 @@ export class AssetStorage {
       )
     await lock.release()
     db.set('base', digest(current))
-    db.db.prepare("DELETE FROM meta WHERE key='pending'").run()
+    this.publicationPlan.clear()
     console.log(
       `Published ${version}: ${index.count} paths, ${index.chunks.length} referenced chunks, ${uploaded} new chunks`,
     )

@@ -155,7 +155,7 @@ already-published chunk contents do not have to be downloaded for building.
 Only one writer may use a local workspace or publish to a server at a time.
 A local `.asset-build.lock` prevents overlapping builds. After a crash, stop
 the previous process before removing this exact local lock file. A remote
-`publish.lock` and a SQLite pending-publication record preserve interrupted
+`publish.lock` and a local `publication-plan.json` file preserve interrupted
 publication state. Failures require `--resume`; do not modify local snapshot
 files or launch a competing recovery process. Stale remote baselines are
 rejected rather than overwritten. A stale workspace must be rebuilt from a
@@ -211,13 +211,24 @@ pnpm x asset ui-unlock --server sdo --storage garage-33 --owner <owner-uuid> --c
 
 `--resume` can reclaim only the same publication UUID, never a different
 publication's lock. To resume on another device, transfer the complete local
-workspace including its catalog, pending plan, snapshot and new chunk files
+workspace including its catalog, `publication-plan.json`, snapshot and new chunk files
 after stopping the original process. Remove a crash-left `.asset-build.lock`
 only after confirming its process is stopped. Manual `ui-unlock` checks the
 owner and rereads the lock before deleting it; it does not delete local pending
 state, chunks, snapshots or current. No publisher may start during manual
 unlock. After abandoning an outdated plan, rebuild in a fresh workspace from
 the latest remote catalog rather than forcing a stale baseline over it.
+
+`publication-plan.json` is stored directly in the local UI server directory
+(for example `storage/ui-chunks/sdo/publication-plan.json`). It is written
+atomically, retained after a failed publication and removed on success. It is
+never uploaded or included in SQLite snapshots. Existing `meta.pending` entries
+in working catalogs are migrated to this JSON file on first use, then removed
+from SQLite; conflicting copies stop migration without overwriting either.
+After stopping the writer, this JSON file can be deleted to discard the saved
+execution plan. Deletion does not release `publish.lock`, reset the catalog's
+baseline or remove image data. Inspect/unlock the remote lock separately when
+abandoning a publication; deleting the file does not bypass stale-baseline checks.
 
 Already-published chunks are compared by UUID, length and digest in the remote
 SQLite catalog only: no chunk GET, HEAD, checksum calculation or upload is
