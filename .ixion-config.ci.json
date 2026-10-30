@@ -16,6 +16,8 @@
       "type": "s3",
       "config": {
         "publicationMode": "cooperative",
+        "requestChecksumCalculation": "WHEN_REQUIRED",
+        "responseChecksumValidation": "WHEN_REQUIRED",
         "endPoint": "{{ BACKBONE_ENDPOINT }}",
         "port": 443,
         "useSSL": true,
