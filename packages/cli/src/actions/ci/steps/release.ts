@@ -5,7 +5,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { createExdFilter } from '@ffcafe/ixion-exd'
 import { compressDirectoryToFile } from '@ffcafe/ixion-utils'
 import { exdSqPackFile, files } from '../../../config'
@@ -27,6 +27,7 @@ import {
 import { createGitHubRelease, isGitHubActions } from '../github'
 import type { Archive } from '../interface'
 import { readReleasedVersions } from '../version'
+import { copyMergedAssets } from './merged-assets'
 
 /**
  * Create zip archive from version files
@@ -103,7 +104,10 @@ async function createMergedArchive({
     writeFileSync(verPath, version, 'utf-8')
 
     await compressDirectoryToFile(tempDir, outputPath)
-    return calculateHashForArchive(tempDir)
+    return {
+      hash: calculateHashForArchive(tempDir),
+      assets: copyMergedAssets(tempDir, dirname(outputPath)),
+    }
   } finally {
     // Clean up temporary directory
     console.log(`🧹 Cleaning up temporary directory: ${tempDir}\n`)
@@ -234,7 +238,7 @@ export async function createRelease(
     archiveDir,
     `${kebabCase(mergedVersionServer)}-${mergedVersion}.zip`,
   )
-  const mergedHash = await createMergedArchive({
+  const merged = await createMergedArchive({
     version: mergedVersion,
     serverVersions: serverArchives,
     outputPath: mergedPath,
@@ -245,12 +249,13 @@ export async function createRelease(
       server: mergedVersionServer,
       version: mergedVersion,
       path: mergedPath,
-      hash: mergedHash,
+      hash: merged.hash,
     },
   ]
 
   // export strings
   const extraAssets: string[] = [
+    ...merged.assets,
     await createStringsArchive({
       serverVersions: serverArchives,
       outputPath: join(archiveDir, 'strings.zip'),
