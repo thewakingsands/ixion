@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { Octokit } from '@octokit/rest'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createGitHubRelease } from '../../src/actions/ci/github'
+import { copyMergedAssets } from '../../src/actions/ci/steps/merged-assets'
 
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, {
@@ -155,6 +156,41 @@ it('publishes a complete draft before recording versions and excludes unrelated 
     git(repo, 'diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'),
   ).toBe('.ci/versions.json')
   expect(git(repo, 'diff', '--cached', '--name-only')).toBe('other.txt')
+})
+it('copies merged resources before cleanup and retries their complete publication', async () => {
+  const game = join(root, 'game')
+  await mkdir(join(game, 'sqpack/ffxiv'), { recursive: true })
+  const inputs = [
+    'ffxivgame.ver',
+    'sqpack/ffxiv/0a0000.win32.dat0',
+    'sqpack/ffxiv/0a0000.win32.index',
+    'sqpack/ffxiv/0a0000.win32.index2',
+  ]
+  for (const [index, file] of inputs.entries())
+    await writeFile(join(game, file), `merged bytes ${index}`)
+  const merged = copyMergedAssets(game, root)
+  await rm(game, { recursive: true })
+  const publish = () =>
+    createGitHubRelease(
+      versions,
+      [{ server: 'sdo', version: 'v2', path: archive }],
+      [extra, ...merged],
+      { cwd: repo, env, octokit: api as unknown as Octokit },
+    )
+  failure = 'upload-merged.0a0000.win32.index'
+  await expect(publish()).rejects.toThrow(failure)
+  expect(releases[0].draft).toBe(true)
+  expect(recorded()).toBe(old)
+  await publish()
+  expect(releases[0].draft).toBe(false)
+  for (const [index, file] of inputs.entries()) {
+    const name = `merged.${file.split('/').at(-1)}`
+    expect(assets.filter((asset) => asset.name === name)).toEqual([
+      expect.objectContaining({ bytes: `merged bytes ${index}` }),
+    ])
+  }
+  expect(await readFile(archive, 'utf8')).toBe('new archive')
+  expect(JSON.parse(recorded())).toEqual(versions)
 })
 it.each([
   'create',
