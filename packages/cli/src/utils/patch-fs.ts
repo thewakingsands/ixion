@@ -2,6 +2,14 @@ import { open } from 'node:fs/promises'
 import { VirtualFileSystem, ZipatchReader } from '@ffcafe/ixion-zipatch'
 
 const MAX_IN_MEMORY_FILE_SIZE = 10 * 1024 * 1024
+
+export class MissingPatchDataError extends Error {
+  constructor(path: string, position: number) {
+    super(`Patch data is unavailable for ${path} at offset ${position}`)
+    this.name = 'MissingPatchDataError'
+  }
+}
+
 export class PatchFileSystem extends VirtualFileSystem {
   async applyPatch(patchPath: string) {
     const reader = await ZipatchReader.open(patchPath)
@@ -89,7 +97,7 @@ export class PatchFileSystem extends VirtualFileSystem {
           length ? position + length : undefined,
         )
         if (!read) {
-          return 0
+          throw new MissingPatchDataError(path, position)
         }
 
         read.copy(buffer, offset)

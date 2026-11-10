@@ -4,6 +4,7 @@ import type { AssetResourceReader } from '@ffcafe/ixion-exd'
 import { uiSqPackFile } from '../../config'
 import { calculateHash } from '../../utils/hash'
 import { mapUnordered } from '../../utils/map-unordered'
+import { MissingPatchDataError } from '../../utils/patch-fs'
 import type {
   ResolvedFileIndex,
   ResolvedIndexMap,
@@ -109,7 +110,14 @@ export async function processTextures(options: {
       if (options.onlyMissing && previous && previous.format !== 'tex')
         return null
 
-      const nextData = await afterStateReader.readFile(path)
+      let nextData: Buffer | null
+      try {
+        nextData = await afterStateReader.readFile(path)
+      } catch (error) {
+        // Incremental patches omit unchanged data; retain its existing mapping.
+        if (error instanceof MissingPatchDataError) return null
+        throw error
+      }
       if (!nextData) {
         // A placeholder can keep its index entry after its texture is removed.
         removePrevious()
